@@ -1,13 +1,67 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import { ProjectId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as ServerConfig from "../../config.ts";
+import * as GitWorkflow from "../../git/GitWorkflowService.ts";
+import * as ThreadLaunch from "../../orchestration-v2/ThreadLaunchService.ts";
+import * as ThreadManagement from "../../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectEnrichment from "../../project/ProjectEnrichmentService.ts";
+import * as Projects from "../../project/ProjectService.ts";
+import * as Providers from "../../provider/ProviderRegistry.ts";
 import * as Git from "../../vcs/GitVcsDriver.ts";
-import { resolveReviewHead } from "./TicketRuntime.ts";
+import { layer, resolveReviewHead, TicketRuntime } from "./TicketRuntime.ts";
+
+it.effect("keeps the same shared repository scope when the project shell cache is empty", () => {
+  const id = ProjectId.make("ledger");
+  const workspaceRoot = "/checkout/ledger";
+  const origin = "example.invalid/rig/ledger";
+  const remoteUrl = `https://${origin}.git`;
+  const layerRuntime = layer.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Layer.mock(Projects.ProjectService)({
+          getShell: () =>
+            Effect.succeedSome({
+              id,
+              title: "Ledger",
+              workspaceRoot,
+              defaultModelSelection: null,
+              repositoryIdentity: null,
+              scripts: [],
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            }),
+        }),
+        Layer.mock(ProjectEnrichment.ProjectEnrichmentService)({
+          readRepositoryIdentity: (root) =>
+            Effect.succeed(
+              root === workspaceRoot
+                ? {
+                    canonicalKey: "example.invalid/fork/ledger",
+                    locator: { source: "git-remote", remoteName: "origin", remoteUrl },
+                    origin: { canonicalKey: origin },
+                  }
+                : null,
+            ),
+        }),
+        Layer.mock(ThreadLaunch.ThreadLaunchService)({}),
+        Layer.mock(ThreadManagement.ThreadManagementService)({}),
+        Layer.mock(Providers.ProviderRegistry)({}),
+        Layer.mock(Git.GitVcsDriver)({}),
+        Layer.mock(GitWorkflow.GitWorkflowService)({}),
+      ),
+    ),
+  );
+  return Effect.gen(function* () {
+    const runtime = yield* TicketRuntime;
+    assert.deepEqual(yield* runtime.project(id), { repository: origin });
+  }).pipe(Effect.provide(layerRuntime));
+});
 
 const layerTest = Git.layer.pipe(
   Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "valhalla2-review-test-" })),

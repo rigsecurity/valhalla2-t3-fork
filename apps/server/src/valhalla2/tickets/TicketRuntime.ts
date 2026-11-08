@@ -5,6 +5,7 @@ import {
   MessageId,
   ProjectId,
   ProviderInstanceId,
+  repositoryGroupingKeyOf,
   ThreadId,
   type ModelSelection,
 } from "@t3tools/contracts";
@@ -16,6 +17,7 @@ import * as Schema from "effect/Schema";
 import * as GitWorkflow from "../../git/GitWorkflowService.ts";
 import * as ThreadLaunch from "../../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagement from "../../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectEnrichment from "../../project/ProjectEnrichmentService.ts";
 import * as Projects from "../../project/ProjectService.ts";
 import * as Providers from "../../provider/ProviderRegistry.ts";
 import * as Git from "../../vcs/GitVcsDriver.ts";
@@ -119,6 +121,7 @@ const make = Effect.gen(function* () {
   const launches = yield* ThreadLaunch.ThreadLaunchService;
   const threads = yield* ThreadManagement.ThreadManagementService;
   const projects = yield* Projects.ProjectService;
+  const enrichment = yield* ProjectEnrichment.ProjectEnrichmentService;
   const providers = yield* Providers.ProviderRegistry;
   const git = yield* Git.GitVcsDriver;
   const workflow = yield* GitWorkflow.GitWorkflowService;
@@ -161,12 +164,10 @@ const make = Effect.gen(function* () {
         .getShell(ProjectId.make(projectId))
         .pipe(Effect.mapError(() => new TicketRuntimeError({ reason: "project" })));
       if (Option.isNone(project)) return yield* new TicketRuntimeError({ reason: "project" });
-      return {
-        repository:
-          project.value.repositoryIdentity?.origin?.canonicalKey ??
-          project.value.repositoryIdentity?.canonicalKey ??
-          project.value.workspaceRoot,
-      };
+      const { repositoryIdentity, workspaceRoot } = project.value;
+      const identity =
+        repositoryIdentity ?? (yield* enrichment.readRepositoryIdentity(workspaceRoot));
+      return { repository: identity ? repositoryGroupingKeyOf(identity) : workspaceRoot };
     }),
     resolveModel: Effect.fn("TicketRuntime.resolveModel")(function* (model, skills = []) {
       const available = yield* providers.getProviders;
