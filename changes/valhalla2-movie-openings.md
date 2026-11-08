@@ -1,3 +1,3 @@
 ### Changed
 
-- **60 movie openings.** New chats rotate through lines from familiar films, with the film title below each one.
+- **60 movie openings.** New chats rotate through film lines picked for starting work or taking on a challenge, with the film title below each one.
