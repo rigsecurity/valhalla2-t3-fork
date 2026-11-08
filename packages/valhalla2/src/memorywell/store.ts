@@ -60,6 +60,16 @@ export class MemoryStore {
       .map((row) => MemoryRecordSchema.parse(JSON.parse(String(row.record))));
   }
 
+  recall(scopes: readonly string[]): MemoryRecord[] {
+    const placeholders = scopes.map(() => "?").join(", ");
+    return this.db
+      .prepare(
+        `SELECT record FROM valhalla2_memory WHERE scope IN (${placeholders}) AND status IN ('captured', 'verified')`,
+      )
+      .all(...scopes)
+      .map((row) => MemoryRecordSchema.parse(JSON.parse(String(row.record))));
+  }
+
   get(id: string): MemoryRecord {
     const row = this.db.prepare("SELECT record FROM valhalla2_memory WHERE id = ?").get(id);
     if (!row) throw new MemorywellError("not-found", "The memory entry no longer exists");

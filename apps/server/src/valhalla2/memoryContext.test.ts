@@ -7,8 +7,14 @@ it("bounds injected memory and marks shortened notes", () => {
     revision: 1,
     title: `Note ${index}`,
     content: "Useful detail. ".repeat(1000),
-  })) as never;
+    status: "captured" as const,
+    provenance: { actor: "agent", kind: "capture" as const, sources: ["tests/smoke.test.ts:12"] },
+  }));
   const result = boundedMemoryContext(notes, 600);
   assert.isAtMost(new TextEncoder().encode(JSON.stringify(result)).byteLength, 600);
   assert.include(JSON.stringify(result), "Note shortened to fit the launch context.");
+  assert.deepInclude(result[0], {
+    status: "captured",
+    sources: ["tests/smoke.test.ts:12"],
+  });
 });

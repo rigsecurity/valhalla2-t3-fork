@@ -99,7 +99,7 @@ const setup = Effect.fn("MemorywellMcpService.test.setup")(function* () {
 });
 
 it.effect(
-  "shares verified project knowledge with external clients without allowing promotion or scope changes",
+  "shares repo notes and verified knowledge with external clients within their access",
   () =>
     Effect.gen(function* () {
       const fixture = yield* setup();
@@ -149,9 +149,16 @@ it.effect(
         expect((yield* Effect.flip(service.retrieve(external, { query: "database" }))).code).toBe(
           "target_required",
         );
-        expect((yield* Effect.flip(service.propose(external, { ...input, projectId }))).code).toBe(
-          "capability_denied",
-        );
+        const capture = {
+          ...input,
+          topic: "testing/cleanup",
+          idempotencyKey: "database-cleanup",
+          reason: "research" as const,
+          sources: ["tests/migrate.test.ts:42"],
+        };
+        expect(
+          (yield* Effect.flip(service.propose(external, { ...capture, projectId }))).code,
+        ).toBe("capability_denied");
         expect(
           (yield* Effect.flip(
             service.retrieve(scope, {
@@ -175,6 +182,12 @@ it.effect(
         expect(fixture.memory.list({ status: "proposed" })[0]?.provenance.actor).toBe(
           `thread:${threadId}`,
         );
+        const captured = yield* service.propose(scope, capture);
+        expect(captured.status).toBe("captured");
+        const recalled = yield* service.retrieve(external, { projectId, query: captured.id });
+        expect(recalled.items).toMatchObject([
+          { id: captured.id, status: "captured", sources: capture.sources },
+        ]);
       }).pipe(Effect.provide(fixture.layer));
     }),
 );

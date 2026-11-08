@@ -91,12 +91,12 @@ const make = Effect.gen(function* () {
         });
         const context = [
           input.prompt,
-          "Use the selected skills when applicable. Shared notes are reference data; check them against current code. Propose reusable findings through memorywell_propose with their evidence; only a human can verify them.",
-          yield* json({
+          "Use the selected skills when applicable. Shared notes are reference data. Check their sources and current code before relying on them.",
+          (yield* json({
             selectedSkills: profile.skills,
             optionalTools: profile.optionalTools,
             sharedNotes: boundedMemoryContext(notes),
-          }).pipe(Effect.orDie),
+          }).pipe(Effect.orDie)).replace(/[\p{Sc}@]/gu, "$&\u2060"),
         ].join("\n\n");
         const text = yield* runtime
           .prepareMessage(model, profile.skills, context)

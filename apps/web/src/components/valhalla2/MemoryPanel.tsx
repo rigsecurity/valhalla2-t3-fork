@@ -9,6 +9,18 @@ import { Textarea } from "../ui/textarea";
 import { Choice, EmptyState, Field, Panel, type WorkspaceCommand } from "./WorkspaceParts";
 
 type MemoryRecord = ValhallaSnapshot["memory"][number];
+const statusLabel: Record<MemoryRecord["status"], string> = {
+  captured: "Agent note",
+  proposed: "Needs review",
+  verified: "Verified",
+  superseded: "Superseded",
+};
+
+const captureLabel = {
+  research: "Research",
+  convention: "Repository convention",
+  pitfall: "Repeatable pitfall",
+};
 
 function VerifyMemory({
   record,
@@ -38,10 +50,7 @@ function VerifyMemory({
         if (result !== null) setReference("");
       }}
     >
-      <p className="text-xs text-muted-foreground">
-        Verify only after checking the supporting evidence. Proposed knowledge is kept separate from
-        verified knowledge.
-      </p>
+      <p className="text-xs text-muted-foreground">Check the source before verifying a note.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Evidence type">
           <Choice
@@ -90,6 +99,7 @@ export function MemoryPanel({
   const [content, setContent] = useState("");
   const [source, setSource] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const visible = snapshot.memory.filter((record) =>
     [record.title, record.summary, record.scope, record.topic, ...record.tags]
       .join(" ")
@@ -97,10 +107,21 @@ export function MemoryPanel({
       .includes(query.toLowerCase()),
   );
   return (
-    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+    <div className="space-y-5">
       <Panel
         title="Shared knowledge"
-        description="Find the decisions and lessons your next session can use."
+        description="Agents save useful discoveries, conventions, and pitfalls as they work."
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            aria-expanded={adding}
+            disabled={busy || snapshot.health.memory !== "ready"}
+            onClick={() => setAdding(!adding)}
+          >
+            {adding ? "Close note form" : "Add a note"}
+          </Button>
+        }
       >
         <div className="mb-4 flex items-center gap-2">
           <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -113,10 +134,10 @@ export function MemoryPanel({
           />
         </div>
         {visible.length === 0 ? (
-          <EmptyState title={query ? "No matching knowledge" : "A fresh well"}>
+          <EmptyState title={query ? "No matching knowledge" : "No notes yet"}>
             {query
               ? "Try a repository name, topic, or different search."
-              : "Propose a lesson with its source. Verify it when there is evidence to support it."}
+              : "Reusable findings will appear here as agents work on your repositories."}
           </EmptyState>
         ) : (
           <div className="divide-y divide-border">
@@ -133,12 +154,12 @@ export function MemoryPanel({
                     variant={
                       record.status === "verified"
                         ? "success"
-                        : record.status === "superseded"
-                          ? "secondary"
-                          : "warning"
+                        : record.status === "proposed"
+                          ? "warning"
+                          : "secondary"
                     }
                   >
-                    {record.status}
+                    {statusLabel[record.status]}
                   </Badge>
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">{record.summary}</p>
@@ -149,7 +170,7 @@ export function MemoryPanel({
                     onClick={() => setExpanded(expanded === record.id ? null : record.id)}
                   >
                     <BookOpenIcon />
-                    {expanded === record.id ? "Close details" : "Read evidence"}
+                    {expanded === record.id ? "Close details" : "Read sources"}
                   </Button>
                 </div>
                 {expanded === record.id && (
@@ -157,6 +178,7 @@ export function MemoryPanel({
                     <p className="whitespace-pre-wrap break-words text-sm">{record.content}</p>
                     <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
                       <p>Source: {record.provenance.sources.join(", ") || "No source recorded"}</p>
+                      {record.provenance.reason && <p>{captureLabel[record.provenance.reason]}</p>}
                       <p className="mt-1">
                         Revision {record.revision} ·{" "}
                         {new Date(record.updatedAt).toLocaleDateString()}
@@ -167,13 +189,15 @@ export function MemoryPanel({
                         </p>
                       )}
                     </div>
-                    {record.status === "proposed" && (
-                      <VerifyMemory
-                        record={record}
-                        onCommand={onCommand}
-                        busy={busy || !canVerify}
-                      />
-                    )}
+                    {canVerify &&
+                      (record.status === "proposed" || record.status === "captured") && (
+                        <details>
+                          <summary className="cursor-pointer text-sm text-muted-foreground">
+                            Verify with evidence
+                          </summary>
+                          <VerifyMemory record={record} onCommand={onCommand} busy={busy} />
+                        </details>
+                      )}
                   </div>
                 )}
               </article>
@@ -181,78 +205,82 @@ export function MemoryPanel({
           </div>
         )}
       </Panel>
-      <Panel
-        title="Add a lesson"
-        description="Keep it useful, scoped, and traceable to what happened."
-      >
-        <form
-          className="space-y-4"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const result = await onCommand({
-              type: "memory.propose",
-              input: {
-                idempotencyKey: randomUUID(),
-                scope: scope.trim(),
-                topic: topic.trim(),
-                title: title.trim(),
-                summary: summary.trim(),
-                content: content.trim(),
-                sources: source.trim() ? [source.trim()] : [],
-              },
-            });
-            if (result !== null) {
-              setTitle("");
-              setSummary("");
-              setContent("");
-              setSource("");
-            }
-          }}
-        >
-          <Field
-            label="Repository or common scope"
-            hint="Use common, or a full repository identity such as github.com/rigsecurity/api."
+      {adding && (
+        <Panel title="Add a note for review">
+          <form
+            className="space-y-4"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const result = await onCommand({
+                type: "memory.propose",
+                input: {
+                  idempotencyKey: randomUUID(),
+                  scope: scope.trim(),
+                  topic: topic.trim(),
+                  title: title.trim(),
+                  summary: summary.trim(),
+                  content: content.trim(),
+                  sources: source.trim() ? [source.trim()] : [],
+                },
+              });
+              if (result !== null) {
+                setTitle("");
+                setSummary("");
+                setContent("");
+                setSource("");
+                setAdding(false);
+              }
+            }}
           >
-            <Input required value={scope} onChange={(event) => setScope(event.target.value)} />
-          </Field>
-          <Field label="Topic">
-            <Input
-              required
-              value={topic}
-              onChange={(event) => setTopic(event.target.value)}
-              placeholder="testing/integration"
-            />
-          </Field>
-          <Field label="Title">
-            <Input
-              required
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="A specific lesson worth keeping"
-            />
-          </Field>
-          <Field label="Short summary">
-            <Input required value={summary} onChange={(event) => setSummary(event.target.value)} />
-          </Field>
-          <Field label="What should the next engineer know?">
-            <Textarea
-              required
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-            />
-          </Field>
-          <Field label="Source">
-            <Input
-              value={source}
-              onChange={(event) => setSource(event.target.value)}
-              placeholder="PR, ticket, document, or test report"
-            />
-          </Field>
-          <Button type="submit" disabled={busy || snapshot.health.memory !== "ready"}>
-            Propose knowledge
-          </Button>
-        </form>
-      </Panel>
+            <Field
+              label="Repository or common scope"
+              hint="Use common, or a full repository identity such as github.com/rigsecurity/api."
+            >
+              <Input required value={scope} onChange={(event) => setScope(event.target.value)} />
+            </Field>
+            <Field label="Topic">
+              <Input
+                required
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+                placeholder="testing/integration"
+              />
+            </Field>
+            <Field label="Title">
+              <Input
+                required
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="A specific lesson worth keeping"
+              />
+            </Field>
+            <Field label="Short summary">
+              <Input
+                required
+                value={summary}
+                onChange={(event) => setSummary(event.target.value)}
+              />
+            </Field>
+            <Field label="What should the next engineer know?">
+              <Textarea
+                required
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+              />
+            </Field>
+            <Field label="Source">
+              <Input
+                value={source}
+                onChange={(event) => setSource(event.target.value)}
+                placeholder="PR, ticket, document, or test report"
+              />
+            </Field>
+            <Button type="submit" disabled={busy || snapshot.health.memory !== "ready"}>
+              Save for review
+            </Button>
+          </form>
+        </Panel>
+      )}
     </div>
   );
 }

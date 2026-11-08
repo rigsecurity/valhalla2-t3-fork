@@ -102,6 +102,32 @@ describe("Memorywell", () => {
     });
   });
 
+  it("recalls cited agent notes by repository and gives verified knowledge precedence", () => {
+    withMemory((well) => {
+      const input = {
+        ...candidate(),
+        reason: "convention" as const,
+        sources: ["tests/migrations.test.ts:42"],
+      };
+      const note = well.capture(input, "agent-a");
+      expect(note).toMatchObject({
+        status: "captured",
+        provenance: { kind: "capture", reason: "convention", sources: input.sources },
+      });
+      expect(well.capture(input, "agent-a")).toEqual(note);
+      expect(well.capture({ ...input, idempotencyKey: "another-agent" }, "agent-b")).toEqual(note);
+      expect(well.retrieve({ scopes: [REPO], query: "database" }).items).toEqual([note]);
+      expect(well.retrieve({ scopes: ["github.com/acme/other"], query: "database" }).items).toEqual(
+        [],
+      );
+      expect(() => well.capture({ ...input, sources: [] }, "agent-a")).toThrow();
+      expect(() => well.capture({ ...input, scope: "common" }, "agent-a")).toThrow();
+
+      const verified = verify(well, well.propose(candidate(), "engineer-a"));
+      expect(well.retrieve({ scopes: [REPO], query: "database" }).items).toEqual([verified]);
+    });
+  });
+
   it("persists receipts and rejects stale decisions from another connection", () => {
     const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "valhalla2-memory-"));
     const filename = NodePath.join(directory, "memory.sqlite");

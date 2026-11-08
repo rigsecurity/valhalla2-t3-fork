@@ -3,6 +3,7 @@ import type * as NodeSqlite from "node:sqlite";
 import { z } from "zod";
 import { legacyCandidates } from "./legacy.ts";
 import {
+  CaptureInputSchema,
   ImportLegacyInputSchema,
   ImportLegacyResultSchema,
   ListInputSchema,
@@ -12,6 +13,7 @@ import {
   SupersedeInputSchema,
   VerifyInputSchema,
   memoryActor,
+  type CaptureInput,
   type ImportLegacyInput,
   type ListInput,
   type MemoryRecord,
@@ -61,14 +63,17 @@ function overlap(words: Set<string>, text: string): number {
   return [...terms(text)].filter((word) => words.has(word)).length;
 }
 
-function score(record: MemoryRecord, query: z.infer<typeof RetrieveInputSchema>): number {
+function score(
+  record: MemoryRecord,
+  query: z.infer<typeof RetrieveInputSchema>,
+  words: Set<string>,
+): number {
   if (
     query.query === record.id ||
     record.aliases.includes(query.query) ||
     query.query === record.topic
   )
     return 1000;
-  const words = terms(query.query);
   const pathHits = query.paths.filter((path) =>
     record.paths.some((cue) => {
       const prefix = cue.split(/[*?[{]/)[0]?.replace(/\/$/, "");
@@ -113,25 +118,50 @@ export class Memorywell {
   retrieve(input: RetrieveInput): { items: MemoryRecord[] } {
     const query = RetrieveInputSchema.parse(input);
     const scopes = new Set([...query.scopes, "common"]);
-    const items = this.store
-      .all()
+    const candidates = this.store.recall([...scopes]);
+    const topicKey = (record: MemoryRecord) => `${record.scope}:${record.topic}`;
+    const verified = new Set(
+      candidates.filter((record) => record.status === "verified").map(topicKey),
+    );
+    const words = terms(query.query);
+    const hits = candidates
+      .filter((record) => record.status === "verified" || !verified.has(topicKey(record)))
       .filter(
-        (record) =>
-          record.status === "verified" &&
-          scopes.has(record.scope) &&
-          (!record.roles.length || (!!query.role && record.roles.includes(query.role))),
+        (record) => !record.roles.length || (!!query.role && record.roles.includes(query.role)),
       )
-      .map((record) => ({ record, score: score(record, query) }))
+      .map((record) => ({ record, score: score(record, query, words) }))
       .filter((hit) => hit.score > 0)
       .sort(
         (a, b) =>
           b.score - a.score ||
+          Number(b.record.status === "verified") - Number(a.record.status === "verified") ||
           b.record.updatedAt.localeCompare(a.record.updatedAt) ||
           a.record.id.localeCompare(b.record.id),
-      )
-      .slice(0, query.limit)
-      .map((hit) => hit.record);
+      );
+    const items: MemoryRecord[] = [];
+    const seen = new Set<string>();
+    for (const { record } of hits) {
+      if (seen.has(topicKey(record))) continue;
+      seen.add(topicKey(record));
+      items.push(record);
+      if (items.length === query.limit) break;
+    }
     return { items };
+  }
+
+  capture(input: CaptureInput, actor: string): MemoryRecord {
+    const candidate = CaptureInputSchema.parse(input);
+    const author = memoryActor(actor);
+    assertSafe(candidate);
+    const { reason, ...note } = candidate;
+    return this.store.once(
+      author,
+      "capture",
+      note.idempotencyKey,
+      candidate,
+      MemoryRecordSchema.parse,
+      () => this.create(note, { actor: author, kind: "capture", reason, sources: note.sources }),
+    );
   }
 
   propose(input: ProposeInput, actor: string): MemoryRecord {
@@ -161,8 +191,11 @@ export class Memorywell {
       () => {
         const record = this.store.get(request.id);
         expected(record, request.expectedRevision);
-        if (record.status !== "proposed")
-          throw new MemorywellError("conflict", "Only a proposed memory can be verified");
+        if (record.status !== "proposed" && record.status !== "captured")
+          throw new MemorywellError(
+            "conflict",
+            "Only a proposed or agent-captured note can be verified",
+          );
         if (this.store.active(record.scope, record.topic))
           throw new MemorywellError(
             "conflict",
@@ -192,7 +225,7 @@ export class Memorywell {
         expected(proposed, request.replacementRevision);
         if (
           old.status !== "verified" ||
-          proposed.status !== "proposed" ||
+          (proposed.status !== "proposed" && proposed.status !== "captured") ||
           old.scope !== proposed.scope ||
           old.topic !== proposed.topic
         ) {
@@ -253,7 +286,8 @@ export class Memorywell {
     aliases: string[] = [],
   ): MemoryRecord {
     const { idempotencyKey: _key, sources: _sources, ...content } = candidate;
-    const hash = fingerprint(content);
+    const captured = provenance.kind === "capture";
+    const hash = fingerprint(captured ? { ...content, captured } : content);
     const existing = this.store.duplicate(candidate.scope, candidate.topic, hash);
     if (existing) return existing;
     const at = this.now();
@@ -263,7 +297,7 @@ export class Memorywell {
       id: `MW-${hash.slice(0, 32)}`,
       contentHash: hash,
       aliases,
-      status: "proposed",
+      status: captured ? "captured" : "proposed",
       revision: 1,
       createdAt: at,
       updatedAt: at,

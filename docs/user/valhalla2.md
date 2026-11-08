@@ -7,13 +7,13 @@ ordinary agent threads remain available in T3's mobile app.
 
 ## Knowledge that carries forward
 
-Use **Knowledge** to find lessons by repository, topic, or title. Propose a lesson with a
-short summary and its source. Use `common` for shared practices or a full repository identity
-such as `github.com/rigsecurity/api` for repository knowledge.
+Agents save useful findings after costly research, confirming a repo convention, or finding a
+repeatable pitfall. **Knowledge** lets you find these notes by repository, topic, or title.
+Future agents can use a captured note after checking its sources against the current checkout.
 
-A proposal is not verified knowledge. Open **Read evidence** and verify it only after checking
-a test result, merged pull request, or human review. The record retains the reference and who
-verified it. Old revisions and legacy imports should not be treated as new proof.
+Use **Read sources** to see what supports a note. Verified guidance takes precedence when a
+topic has both kinds of note. For a manual addition, choose **Add a note** and include a source.
+Team-wide notes use the `common` scope and need verification.
 
 The workspace shows whether its memory endpoint is available. Engineers connected to the same
 environment share its memory. An endpoint on your machine does not automatically synchronize

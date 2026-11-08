@@ -1,5 +1,10 @@
 import { MemoryScopeSchema } from "@rig/valhalla2/memorywell/schema";
-import { OrchestratorMcpFailure, ProjectId, TrimmedNonEmptyString } from "@t3tools/contracts";
+import {
+  OrchestratorMcpFailure,
+  ProjectId,
+  repositoryGroupingKeyOf,
+  TrimmedNonEmptyString,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -30,6 +35,7 @@ export const MemoryProposeInput = Schema.Struct({
   title: Text(160),
   summary: Text(400),
   content: Text(3000),
+  reason: Schema.optional(Schema.Literals(["research", "convention", "pitfall"])),
   tags: Schema.optional(Schema.Array(Text(80)).check(Schema.isMaxLength(32))),
   paths: Schema.optional(Paths),
   sources: Schema.optional(Schema.Array(Text(1000)).check(Schema.isMaxLength(30))),
@@ -45,6 +51,8 @@ export const MemoryRetrieveResult = Schema.Struct({
       title: Schema.String,
       summary: Schema.String,
       content: Schema.String,
+      status: Schema.String,
+      sources: Schema.Array(Schema.String),
       revision: Schema.Int,
       truncated: Schema.Boolean,
     }),
@@ -130,7 +138,9 @@ const make = Effect.gen(function* () {
     const identity =
       project.value.repositoryIdentity ??
       (yield* enrichment.readRepositoryIdentity(project.value.workspaceRoot));
-    const repository = MemoryScopeSchema.safeParse(identity?.canonicalKey);
+    const repository = MemoryScopeSchema.safeParse(
+      identity ? repositoryGroupingKeyOf(identity) : undefined,
+    );
     if (!repository.success || repository.data === "common")
       return yield* new OrchestratorMcpFailure({
         code: "invalid_request",
@@ -170,6 +180,8 @@ const make = Effect.gen(function* () {
         title: record.title,
         summary: record.summary,
         content,
+        status: record.status,
+        sources: record.provenance.sources.slice(0, 4),
         revision: record.revision,
         truncated: content.length < record.content.length,
       };
@@ -198,27 +210,28 @@ const make = Effect.gen(function* () {
     const actor = scope.thread
       ? `thread:${scope.thread.threadId}`
       : `client:${scope.client!.sessionId}`;
+    const note = {
+      idempotencyKey: input.idempotencyKey,
+      scope: repository,
+      topic: input.topic,
+      title: input.title,
+      summary: input.summary,
+      content: input.content,
+      tags: [...(input.tags ?? [])],
+      paths: [...(input.paths ?? [])],
+      sources: [...(input.sources ?? [])],
+    };
     const record = yield* Effect.try({
       try: () =>
-        store.memory.propose(
-          {
-            idempotencyKey: input.idempotencyKey,
-            scope: repository,
-            topic: input.topic,
-            title: input.title,
-            summary: input.summary,
-            content: input.content,
-            tags: [...(input.tags ?? [])],
-            paths: [...(input.paths ?? [])],
-            sources: [...(input.sources ?? []), actor],
-          },
-          actor,
-        ),
+        input.reason
+          ? store.memory.capture({ ...note, reason: input.reason }, actor)
+          : store.memory.propose({ ...note, sources: [...note.sources, actor] }, actor),
       catch: () =>
         new OrchestratorMcpFailure({
           code: "invalid_request",
-          message:
-            "The memory proposal has invalid fields, contains a possible credential, or reuses a request key with different content.",
+          message: input.reason
+            ? "Save a short note with one to four checkable sources. Remove possible credentials and reuse a request key only for identical content."
+            : "The memory proposal has invalid fields, contains a possible credential, or reuses a request key with different content.",
         }),
     });
     return {
@@ -227,9 +240,11 @@ const make = Effect.gen(function* () {
       status: record.status,
       revision: record.revision,
       message:
-        record.status === "proposed"
-          ? "Saved as a proposal. It reaches other agents only after a person verifies it in Memorywell."
-          : "This knowledge is already recorded; its verification state was not changed.",
+        record.status === "captured"
+          ? "Saved as an agent note for this repository. Later agents can check its sources before using it."
+          : record.status === "proposed"
+            ? "Saved as a proposal. It reaches other agents only after a person verifies it in Memorywell."
+            : "This knowledge is already recorded; its verification state was not changed.",
     };
   });
 

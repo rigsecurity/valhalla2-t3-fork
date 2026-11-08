@@ -16,6 +16,7 @@ const RelativePath = z
   );
 const Actor = z.string().trim().min(1).max(200);
 const DateTime = z.iso.datetime({ offset: true });
+const CaptureReason = z.enum(["research", "convention", "pitfall"]);
 const Content = {
   scope: MemoryScopeSchema,
   topic: z
@@ -43,7 +44,7 @@ export const MemoryRecordSchema = z.strictObject({
   ...Content,
   schemaVersion: z.literal(1),
   id: z.string().regex(/^MW-[a-f0-9]{32}$/),
-  status: z.enum(["proposed", "verified", "superseded"]),
+  status: z.enum(["captured", "proposed", "verified", "superseded"]),
   revision: z.number().int().positive(),
   contentHash: z.string().regex(/^[a-f0-9]{64}$/),
   aliases: z.array(z.string().min(1).max(200)).max(32),
@@ -51,7 +52,8 @@ export const MemoryRecordSchema = z.strictObject({
   updatedAt: DateTime,
   provenance: z.strictObject({
     actor: Actor,
-    kind: z.enum(["proposal", "legacy"]),
+    kind: z.enum(["capture", "proposal", "legacy"]),
+    reason: CaptureReason.optional(),
     sources: z.array(z.string().min(1).max(1000)).max(32),
     sourcePath: RelativePath.optional(),
     sourceUpdatedAt: z.string().max(100).optional(),
@@ -68,6 +70,13 @@ export const ProposeInputSchema = z.strictObject({
   ...Content,
   idempotencyKey: Key,
   sources: z.array(z.string().min(1).max(1000)).max(32).default([]),
+});
+
+export const CaptureInputSchema = ProposeInputSchema.extend({
+  scope: MemoryScopeSchema.refine((scope) => scope !== "common"),
+  content: Content.content.max(1600),
+  reason: CaptureReason,
+  sources: z.array(z.string().trim().min(3).max(500)).min(1).max(4),
 });
 
 export const VerifyInputSchema = z.strictObject({
@@ -121,6 +130,7 @@ export const ImportLegacyResultSchema = z.strictObject({
 });
 
 export type MemoryRecord = z.infer<typeof MemoryRecordSchema>;
+export type CaptureInput = z.input<typeof CaptureInputSchema>;
 export type ProposeInput = z.input<typeof ProposeInputSchema>;
 export type VerifyInput = z.input<typeof VerifyInputSchema>;
 export type SupersedeInput = z.input<typeof SupersedeInputSchema>;

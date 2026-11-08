@@ -20,7 +20,8 @@ import {
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
-import { T3Wordmark } from "../T3Wordmark";
+import rigMark from "../valhalla2/rig-mark.svg";
+import "../valhalla2/valhalla2.css";
 import {
   resolveEnvironmentIdentificationPillLabel,
   resolveSidebarStageBackdropVariant,
@@ -64,6 +65,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
 
   return (
     <div
+      data-valhalla2-sidebar-brand
       className={cn(
         "relative flex h-[var(--workspace-topbar-height)] shrink-0 flex-row items-center gap-2 pr-3",
         isElectron && "drag-region",
@@ -119,7 +121,7 @@ export function SidebarBrandWidthProbe({
       ref={observeWidth}
     >
       <div className="ml-[var(--workspace-titlebar-content-left)] flex gap-1">
-        <SidebarBrandMark onBackdrop={false} />
+        <SidebarBrandMark />
         {isElectron ? <div className="w-[calc(2*var(--workspace-titlebar-control-size))]" /> : null}
       </div>
     </div>
@@ -171,30 +173,23 @@ function HistoryNavigationButton({
 function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
   return (
     <Link
-      aria-label="T3 Code home"
+      aria-label="Valhalla2 home"
       className={cn(
         "relative z-10 ml-[var(--workspace-titlebar-content-left)] hidden h-7 w-fit min-w-0 shrink-0 items-center overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 focus-visible:ring-inset md:flex",
         onBackdrop ? "text-white" : "text-foreground",
       )}
       to="/"
     >
-      <SidebarBrandMark onBackdrop={onBackdrop} />
+      <SidebarBrandMark />
     </Link>
   );
 }
 
-function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
+function SidebarBrandMark() {
   return (
-    <span className="inline-flex min-w-0 items-baseline gap-1 text-sm font-medium tracking-tight">
-      <T3Wordmark aria-label="T3" className="h-[1cap] w-auto shrink-0" />
-      <span
-        className={cn(
-          "truncate [text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both_cap_alphabetic]:py-1",
-          onBackdrop ? "text-white/70" : "text-muted-foreground",
-        )}
-      >
-        Code
-      </span>
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium tracking-tight">
+      <img src={rigMark} alt="" width={18} height={16} className="shrink-0" />
+      <span className="truncate">Valhalla2</span>
     </span>
   );
 }
