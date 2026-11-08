@@ -27,6 +27,10 @@
       "types": "./src/themePalettes.ts",
       "import": "./src/themePalettes.ts"
     },
+    "./draftOpeningLine": {
+      "types": "./src/draftOpeningLine.ts",
+      "import": "./src/draftOpeningLine.ts"
+    },
     "./themePreview": {
       "types": "./src/themePreview.ts",
       "import": "./src/themePreview.ts"

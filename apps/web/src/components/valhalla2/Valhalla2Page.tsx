@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import {
   BookOpenIcon,
   ChartNoAxesColumnIcon,
+  PaletteIcon,
   RefreshCwIcon,
   SlidersHorizontalIcon,
 } from "lucide-react";
@@ -26,7 +27,8 @@ import { TicketsPanel } from "./TicketsPanel";
 import { WorkflowsPanel } from "./WorkflowsPanel";
 import { StartWorkflow } from "./StartWorkflow";
 import { Choice, EmptyState } from "./WorkspaceParts";
-import rigMark from "./rig-mark.svg";
+import { RigAtmosphere } from "../branding/RigAtmosphere";
+import rigMark from "../branding/rig-mark.svg";
 import "./valhalla2.css";
 
 const sections = [
@@ -84,22 +86,29 @@ function EnvironmentWorkspace({ environmentId }: { environmentId: EnvironmentId 
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-        <nav aria-label="Valhalla2 workspace" className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border pb-2">
+        <nav aria-label="Valhalla2 workspace" className="flex flex-wrap gap-x-2 gap-y-1">
           {sections.map(({ id, label, icon: Icon }) => (
-            <Button
-              key={id}
-              variant={section === id ? "secondary" : "ghost"}
-              size="sm"
-              aria-pressed={section === id}
-              onClick={() => {
-                setCommandError(null);
-                setSection(id);
-              }}
-            >
-              <Icon />
-              {label}
-            </Button>
+            <div key={id} className="relative">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-pressed={section === id}
+                onClick={() => {
+                  setCommandError(null);
+                  setSection(id);
+                }}
+              >
+                <Icon />
+                {label}
+              </Button>
+              {section === id && (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary"
+                />
+              )}
+            </div>
           ))}
         </nav>
         <Button
@@ -187,41 +196,52 @@ export function Valhalla2Page() {
     environments.find((environment) => environment.environmentId === (selection ?? primary))
       ?.environmentId ?? (selection === null ? environments[0]?.environmentId : undefined);
   return (
-    <div data-valhalla2-workspace className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex min-h-[var(--workspace-topbar-height)] shrink-0 items-center gap-3 border-t-2 border-b border-border border-t-primary px-4">
+    <div
+      data-valhalla2-workspace
+      data-rig-studio
+      className="flex h-full min-h-0 flex-col bg-background"
+    >
+      <header className="flex min-h-[var(--workspace-topbar-height)] shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-1">
         <SidebarTrigger />
         <div className="flex shrink-0 items-center gap-2">
           <img src={rigMark} alt="Rig" width={25} height={22} />
           <span className="text-sm font-medium">Valhalla2</span>
         </div>
-        {environments.length > 1 && (
-          <div className="ml-auto w-48 min-w-0">
-            <Choice
-              label="Workspace environment"
-              value={environmentId ?? ""}
-              onChange={setSelection}
-              options={environments.map((environment) => ({
-                value: environment.environmentId,
-                label: environment.label,
-              }))}
-            />
-          </div>
-        )}
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          {environments.length > 1 && (
+            <div className="w-36 min-w-0 sm:w-48">
+              <Choice
+                label="Workspace environment"
+                value={environmentId ?? ""}
+                onChange={setSelection}
+                options={environments.map((environment) => ({
+                  value: environment.environmentId,
+                  label: environment.label,
+                }))}
+              />
+            </div>
+          )}
+          <Button variant="ghost" size="sm" render={<Link to="/settings/appearance" />}>
+            <PaletteIcon />
+            Appearance
+          </Button>
+        </div>
       </header>
       <ScrollArea>
         <WorkspacePageContainer width="expanded">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+          <div className="relative isolate overflow-hidden rounded-2xl border border-border bg-card px-5 py-8 sm:px-8 sm:py-11">
+            <RigAtmosphere />
+            <div className="relative">
+              <p className="mb-3 font-mono text-2xs text-(--rig-accent) tracking-widest uppercase">
+                Rig Engineering
+              </p>
+              <h1 className="text-balance font-semibold text-3xl tracking-tighter sm:text-4xl">
                 Engineering workspace
               </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-2 text-sm text-muted-foreground">
                 Work from Jira tickets or start with your own workflow.
               </p>
             </div>
-            <Button variant="ghost" size="sm" render={<Link to="/settings/appearance" />}>
-              Appearance
-            </Button>
           </div>
           {environmentId ? (
             <EnvironmentWorkspace key={environmentId} environmentId={environmentId} />

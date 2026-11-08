@@ -259,6 +259,7 @@ import {
 import { useEnvironmentShellHasSnapshot } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
+import { RigAtmosphere } from "./branding/RigAtmosphere";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/ExpandedImageDialog";
 import {
   BranchRestoreConfirmHost,
@@ -3343,7 +3344,10 @@ export default function ChatView(props: ChatViewProps) {
           </header>
         )}
 
-        <div className="relative flex min-h-0 min-w-0 flex-1">
+        <div
+          className="relative flex min-h-0 min-w-0 flex-1"
+          data-rig-studio={isDraftHeroState ? "" : undefined}
+        >
           <ThreadFindCanvas
             findOptions={{
               skills: timelineSkills,
@@ -3510,6 +3514,7 @@ export default function ChatView(props: ChatViewProps) {
                   : "pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-1.5 sm:pt-2"
               }
             >
+              {isDraftHeroState && <RigAtmosphere arrive />}
               <div ref={draftHeroTransitionGroupRef} className="chat-composer-lane w-full">
                 <div
                   data-chat-composer-stack="true"

@@ -2,9 +2,13 @@
 
 Open **Valhalla2** in the sidebar, or search for it in the command palette. If you have multiple
 environments, choose the one that owns your repository. Use **Appearance** to switch between
-light, dark, and system mode for the whole app. The workspace is available on web and desktop,
+light, dark, and system mode for the whole app, choose the Rig palette, or change your fonts.
+The workspace is available on web and desktop,
 including the web app at phone widths. There is no dedicated native mobile workspace yet;
 ordinary agent threads remain available in T3's mobile app.
+
+New chats open with a line from a movie or a riff on one. The line stays with the draft.
+Choose a project below it or use **Start without a project** to work in a scratch space.
 
 ## Knowledge that carries forward
 

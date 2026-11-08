@@ -13,6 +13,7 @@ import { scopedProjectKey } from "../../lib/scopedEntities";
 import { connectionTone } from "../connection/connectionTone";
 import { AppBar } from "../../components/ui/AppBar";
 import { ThreadId } from "@t3tools/contracts";
+import { draftOpeningLine } from "@t3tools/shared/draftOpeningLine";
 
 import * as Dialog from "../../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
@@ -29,7 +30,7 @@ import {
   useRoute,
 } from "@react-navigation/native";
 import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, View } from "react-native";
+import { Platform, View } from "react-native";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { KeyboardController } from "react-native-keyboard-controller";
 
@@ -729,53 +730,34 @@ export function NewTaskDraftScreen(props: {
       The shared content is no longer in the inbox. You can continue editing this task draft.
     </Text>
   ) : null;
-  const hero = flow.isScratchDraft ? (
-    <View className="items-center gap-2 px-6" testID="new-task-hero">
-      <Text className="text-center text-2xl font-t3-medium tracking-tight text-foreground">
-        What should we work on?
-      </Text>
+  const opening = draftOpeningLine(props.draftId ?? flow.draftKey);
+  const projectLabel = flow.isScratchDraft
+    ? "No project"
+    : (selectedProjectLabel ?? selectedProject.title);
+  const hero = (
+    <View className="items-center gap-3 px-6" testID="new-task-hero">
+      <View className="items-center gap-1.5">
+        <Text
+          accessibilityRole="header"
+          className="text-center text-3xl font-t3-medium tracking-tight text-foreground"
+        >
+          {opening.line}
+        </Text>
+        <Text textRole="footnote" className="text-center text-foreground-muted">
+          {opening.credit}
+        </Text>
+      </View>
       <View className="flex-row flex-wrap items-center justify-center gap-x-1">
         <ComposerInlineControl
           accessibilityHint="Opens the project picker"
-          accessibilityLabel="No project"
           chevronDirection="right"
           disabled={isComposerInteractionLocked}
           icon="folder"
-          label="No project"
+          label={projectLabel}
           onPress={chooseProject}
         />
         {environmentControl}
       </View>
-      {shareUnavailableNotice}
-    </View>
-  ) : (
-    <View className="items-center gap-6 px-6" testID="new-task-hero">
-      <View className="w-full items-center gap-1.5">
-        <Text className="text-center text-2xl font-t3-medium tracking-tight text-foreground">
-          What should we build
-        </Text>
-        <View className="max-w-full flex-row items-center justify-center">
-          <Text className="text-2xl font-t3-medium tracking-tight text-foreground">in </Text>
-          <Pressable
-            accessibilityHint="Opens the project picker"
-            accessibilityLabel={selectedProjectLabel ?? selectedProject.title}
-            accessibilityRole="button"
-            disabled={isComposerInteractionLocked}
-            onPress={chooseProject}
-            className="min-w-0 max-w-[250px] border-b border-foreground-muted active:opacity-65"
-          >
-            <Text
-              className="text-2xl font-t3-medium tracking-tight text-foreground"
-              numberOfLines={1}
-            >
-              {selectedProjectLabel ?? selectedProject.title}
-            </Text>
-          </Pressable>
-          <Text className="text-2xl font-t3-medium tracking-tight text-foreground">?</Text>
-        </View>
-      </View>
-
-      {environmentControl}
       {shareUnavailableNotice}
     </View>
   );

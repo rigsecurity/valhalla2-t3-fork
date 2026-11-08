@@ -41,7 +41,7 @@ function TicketRunCard({
   const [confirmPublish, setConfirmPublish] = useState(false);
   const canStop = !["published", "publishing", "cancelled", "taken_over"].includes(run.status);
   return (
-    <article className="rounded-lg border border-border p-4">
+    <article className="border-b border-border pb-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">

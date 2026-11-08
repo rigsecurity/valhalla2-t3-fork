@@ -1,0 +1,53 @@
+@reference "../../index.css";
+
+[data-rig-studio] {
+  --rig-accent: #1c694f;
+  --rig-glow: #35d2ae;
+
+  @variant dark {
+    --rig-accent: #59f5bd;
+    --rig-glow: #35d2ae;
+  }
+}
+
+html[data-theme-id] [data-rig-studio] {
+  --rig-accent: var(--primary);
+  --rig-glow: var(--ring);
+}
+
+[data-rig-atmosphere-wash] {
+  background:
+    radial-gradient(
+      ellipse 57% 58% at 78% 41%,
+      color-mix(in oklab, var(--rig-glow) 20%, transparent),
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 42% 58% at 35% 85%,
+      color-mix(in oklab, var(--rig-accent) 9%, transparent),
+      transparent 95%
+    );
+
+  @media (prefers-reduced-motion: no-preference) {
+    &[data-arrive] {
+      animation: rig-atmosphere-arrive 4.6s ease-out backwards;
+    }
+  }
+}
+
+[data-rig-atmosphere-contours] {
+  color: color-mix(in oklab, var(--rig-accent) 19%, transparent);
+  mask-image: radial-gradient(ellipse 68% 76% at 80% 52%, black 12%, transparent 96%);
+}
+
+@keyframes rig-atmosphere-arrive {
+  from {
+    transform: translate3d(4%, -5%, 0) scale(0.97);
+    opacity: 0.46;
+  }
+
+  to {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 1;
+  }
+}

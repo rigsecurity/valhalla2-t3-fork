@@ -51,6 +51,20 @@
         // Keep this small boot-time copy in sync with the built-in palettes so
         // the selected theme is visible before the app has mounted.
         const BUILT_IN_THEME_PALETTES = {
+          rig: {
+            light: {
+              background: "#f3f8f5",
+              foreground: "#132c23",
+              accent: "#1c694f",
+              chrome: "#edf5f0",
+            },
+            dark: {
+              background: "#08120e",
+              foreground: "#eef5f1",
+              accent: "#59f5bd",
+              chrome: "#0b1914",
+            },
+          },
           "t3-chat": {
             light: {
               background: "oklch(0.982446 0.010114 325.653)",
@@ -132,6 +146,7 @@
           "system",
           "light",
           "dark",
+          "rig",
           "t3-chat",
           "grove",
           "ocean",

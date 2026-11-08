@@ -20,7 +20,7 @@ import {
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
-import rigMark from "../valhalla2/rig-mark.svg";
+import rigMark from "../branding/rig-mark.svg";
 import "../valhalla2/valhalla2.css";
 import {
   resolveEnvironmentIdentificationPillLabel,

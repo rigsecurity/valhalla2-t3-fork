@@ -11,6 +11,10 @@ Use **Change appearance** in the command palette to choose System, Light, or Dar
 the theme. **Cmd+Option+Shift+A** on macOS or **Ctrl+Alt+Shift+A** on Windows/Linux cycles through
 those modes. Customize these shortcuts under **Settings → Keybindings**.
 
+Choose **Rig** for a mint and pine palette with both light and dark versions. In the web
+and desktop app, **Typography** on the same page lets you change the interface, composer,
+code, and terminal fonts. New chats and Valhalla2 link directly to Appearance.
+
 On mobile, open **Settings → Appearance**. Mobile has its own themes and text,
 code, and terminal preferences. It does not follow environment themes or defaults.
 
@@ -47,6 +51,9 @@ The main sidebar, right panel, and terminal drawer open and close immediately by
 **Panel animations** slider above 0 ms to add motion, up to 400 ms, unless reduced motion is enabled
 in your operating system. Moving between threads always snaps to the selected thread's panel state
 without replaying its transitions.
+
+The new-chat background on web and desktop drifts once as the draft opens, then settles.
+It stays still when reduced motion is enabled in your operating system.
 
 ## Custom themes
 

@@ -5,6 +5,8 @@ import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/envir
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { FolderPlusIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
+import { draftOpeningLine } from "@t3tools/shared/draftOpeningLine";
+import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 
 import { openCommandPalette } from "~/commandPaletteBus";
@@ -49,8 +51,8 @@ import {
 } from "../ui/combobox";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { InlineButton } from "../ui/button";
+import rigMark from "../branding/rig-mark.svg";
 import { DraftProjectName } from "./DraftProjectName";
-import { DraftHeroProjectHeading } from "./DraftHeroProjectHeading";
 import { TriageDraftHero } from "./TriageDraftHero";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { resolveProjectDefaultProviderModelSelection } from "../../providerInstances";
@@ -365,13 +367,9 @@ export function DraftHeroHeadline({
       </ComboboxPopup>
     </Combobox>
   ) : (
-    <button
-      type="button"
-      onClick={openAddProject}
-      className="pointer-events-auto inline min-w-0 max-w-full cursor-pointer border-muted-foreground/35 border-b border-dotted text-muted-foreground/60 transition-colors hover:border-muted-foreground/60 hover:text-muted-foreground/80 focus-visible:rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-    >
+    <InlineButton tone="picker" onClick={openAddProject} className="min-w-0 max-w-full">
       <DraftProjectName value={activeProjectTitle ?? "Add a project"} singleLine />
-    </button>
+    </InlineButton>
   );
 
   const noProjectShortcut = shortcutLabelForCommand(keybindings, "chat.newWithoutProject");
@@ -393,7 +391,7 @@ export function DraftHeroHeadline({
             />
           }
         >
-          or start without a project
+          Start without a project
         </TooltipTrigger>
         {noProjectShortcut ? <TooltipPopup side="bottom">{noProjectShortcut}</TooltipPopup> : null}
       </Tooltip>
@@ -411,28 +409,31 @@ export function DraftHeroHeadline({
     );
   }
 
+  const opening = draftOpeningLine(draftId);
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col items-center">
-      {hasResolvedProject && !isScratchDraft ? (
-        <DraftHeroProjectHeading projectName={activeProjectTitle ?? "Choose a project"}>
-          {projectSelector}
-        </DraftHeroProjectHeading>
-      ) : (
-        <h1 className="w-full text-center font-normal text-2xl text-foreground tracking-tight sm:text-3xl">
-          {isScratchDraft ? (
-            <>What should we work on?</>
-          ) : canChooseProject ? (
-            <>{projectSelector} to start</>
-          ) : (
-            <>Add a project to start</>
-          )}
+    <div className="mx-auto flex min-w-0 max-w-5xl flex-col gap-3 px-1 pb-2 sm:gap-4 sm:px-2 [@media(max-height:560px)]:gap-2">
+      <div className="flex items-center gap-2.5 font-mono text-2xs text-(--rig-accent) tracking-widest uppercase [@media(max-height:560px)]:hidden">
+        <img src={rigMark} alt="Rig" width={17} height={15} />
+        <span>New chat</span>
+      </div>
+      <div>
+        <h1 className="max-w-2xl text-balance font-semibold text-3xl text-foreground leading-tight tracking-tighter sm:text-5xl [@media(max-height:560px)]:text-2xl">
+          {opening.line}
         </h1>
-      )}
-      {scratchWorkspaceRoot === null ? null : (
-        <p className="mt-2 flex h-6 w-full items-center justify-center text-sm">
-          {isScratchDraft ? projectSelector : orStartWithoutProject}
+        <p className="mt-2 font-mono text-2xs text-muted-foreground tracking-wide [@media(max-height:560px)]:hidden">
+          {opening.credit}
         </p>
-      )}
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <div className="flex min-w-0 max-w-full items-center gap-2">
+          <span className="text-muted-foreground">Project</span>
+          {projectSelector}
+        </div>
+        {orStartWithoutProject}
+        <InlineButton tone="muted" render={<Link to="/settings/appearance" />}>
+          Appearance
+        </InlineButton>
+      </div>
     </div>
   );
 }
