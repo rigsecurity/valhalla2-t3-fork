@@ -1,3 +1,4 @@
+import { ValhallaError, ValhallaCommand, ValhallaSnapshot } from "./valhalla2.ts";
 import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
@@ -406,6 +407,8 @@ import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
+  valhalla2GetSnapshot: "valhalla2.getSnapshot",
+  valhalla2Command: "valhalla2.command",
   projectsListEntries: "projects.listEntries",
   projectsListIgnoredFiles: "projects.listIgnoredFiles",
   projectsReadFile: "projects.readFile",
@@ -956,6 +959,17 @@ const WsServerPrepareTriageRpc = Rpc.make(WS_METHODS.serverPrepareTriage, {
   payload: ServerPrepareTriageInput,
   success: ServerPrepareTriageResult,
   error: Schema.Union([ServerPrepareTriageError, EnvironmentAuthorizationError]),
+});
+
+const WsValhalla2GetSnapshotRpc = Rpc.make(WS_METHODS.valhalla2GetSnapshot, {
+  payload: Schema.Struct({}),
+  success: ValhallaSnapshot,
+  error: Schema.Union([ValhallaError, EnvironmentAuthorizationError]),
+});
+const WsValhalla2CommandRpc = Rpc.make(WS_METHODS.valhalla2Command, {
+  payload: Schema.Struct({ command: ValhallaCommand }),
+  success: Schema.Unknown,
+  error: Schema.Union([ValhallaError, EnvironmentAuthorizationError]),
 });
 
 const WsServerGetUsageSummaryRpc = Rpc.make(WS_METHODS.serverGetUsageSummary, {
@@ -1988,6 +2002,8 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
+  WsValhalla2GetSnapshotRpc,
+  WsValhalla2CommandRpc,
   WsGuestShareCreateRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,

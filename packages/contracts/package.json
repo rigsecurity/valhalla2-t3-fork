@@ -25,6 +25,7 @@
     "test": "vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
+    "@rig/valhalla2": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

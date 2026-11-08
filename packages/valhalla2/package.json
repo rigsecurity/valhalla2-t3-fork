@@ -1,0 +1,30 @@
+{
+  "name": "@rig/valhalla2",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./contracts": "./src/contracts.ts",
+    "./profiles": "./src/profiles.ts",
+    "./outcomes": "./src/outcomes.ts",
+    "./tickets": "./src/tickets.ts",
+    "./memorywell/schema": "./src/memorywell/schema.ts",
+    "./memorywell/service": "./src/memorywell/service.ts",
+    "./snapshot": "./src/snapshot.ts",
+    "./workflowRequests": "./src/workflowRequests.ts",
+    "./commands": "./src/commands.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vp test run --config ../../vite.config.ts --dir ."
+  },
+  "dependencies": {
+    "yaml": "catalog:",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

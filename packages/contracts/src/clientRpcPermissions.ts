@@ -15,6 +15,8 @@ import { WS_METHODS } from "./rpc.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
+  [WS_METHODS.valhalla2GetSnapshot]: AuthOrchestrationReadScope,
+  [WS_METHODS.valhalla2Command]: AuthOrchestrationOperateScope,
   [WS_METHODS.previewClose]: AuthPreviewOperateScope,
   // Stopping a server signals its processes, as closing a terminal does.
   [WS_METHODS.previewStopLocalServer]: AuthTerminalOperateScope,
@@ -75,11 +77,21 @@ export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
 const decodePrepareThread = Schema.decodeUnknownSync(GitPreparePullRequestThreadInput);
 const decodeStackedAction = Schema.decodeUnknownSync(GitRunStackedActionInput);
+const decodeValhallaCommandType = Schema.decodeUnknownSync(
+  Schema.Struct({ command: Schema.Struct({ type: Schema.String }) }),
+);
 
 export function clientRpcRequiredScopes(
   method: string,
   input: unknown,
 ): readonly AuthEnvironmentScope[] {
+  if (method === WS_METHODS.valhalla2Command && input !== undefined) {
+    const payload = decodeValhallaCommandType(input);
+    if (payload.command.type === "ticket.publish")
+      return [AuthOrchestrationOperateScope, AuthSourceControlWriteScope];
+    if (["memory.verify", "memory.supersede", "memory.import"].includes(payload.command.type))
+      return [AuthOrchestrationOperateScope, AuthSettingsWriteScope];
+  }
   if (method === WS_METHODS.gitPreparePullRequestThread && input !== undefined) {
     const payload = decodePrepareThread(input);
     if (payload.mode === "worktree" && payload.threadId !== undefined)

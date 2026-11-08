@@ -518,6 +518,10 @@
     "./provider-clients": {
       "types": "./src/providerClients.ts",
       "default": "./src/providerClients.ts"
+    },
+    "./state/valhalla2": {
+      "types": "./src/state/valhalla2.ts",
+      "default": "./src/state/valhalla2.ts"
     }
   },
   "scripts": {

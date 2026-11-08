@@ -1,3 +1,10 @@
+import * as MemorywellMcpService from "./mcp/MemorywellMcpService.ts";
+import * as Valhalla from "./valhalla2/ValhallaService.ts";
+import * as ValhallaStore from "./valhalla2/ValhallaStore.ts";
+import * as WorkflowLauncher from "./valhalla2/WorkflowLauncher.ts";
+import * as TicketWorkflow from "./valhalla2/tickets/TicketWorkflow.ts";
+import * as TicketRuntime from "./valhalla2/tickets/TicketRuntime.ts";
+import * as ValhallaJira from "./valhalla2/tickets/JiraClient.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
 import * as Random from "effect/Random";
@@ -754,6 +761,14 @@ const layerCommandReadiness = HttpRouter.middleware(
   { global: true },
 );
 
+const layerValhalla = Valhalla.layer.pipe(
+  Layer.provideMerge(WorkflowLauncher.layer),
+  Layer.provideMerge(TicketWorkflow.layer),
+  Layer.provideMerge(TicketRuntime.layer),
+  Layer.provideMerge(ValhallaJira.layer),
+  Layer.provideMerge(ValhallaStore.layer),
+);
+
 const layerMakeRoutes = Layer.mergeAll(
   Layer.mergeAll(
     HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
@@ -810,6 +825,8 @@ const layerMakeRoutes = Layer.mergeAll(
   ),
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(layerDesktopAppUpdate))),
+  Layer.provide(MemorywellMcpService.layer),
+  Layer.provide(layerValhalla),
   Layer.provide(layerCommandReadiness),
   Layer.provide(ServerHttp.layerBrowserApiCors),
   Layer.provide(ServerHttp.layerHttpCompression),

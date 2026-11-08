@@ -1,0 +1,12 @@
+@reference "../../index.css";
+
+[data-valhalla2-workspace] {
+  --primary: #264536;
+  --primary-foreground: #eef5f1;
+  --ring: var(--primary);
+
+  @variant dark {
+    --primary: #59f5bd;
+    --primary-foreground: #06241a;
+  }
+}

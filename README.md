@@ -103,6 +103,10 @@ We are (mostly) not accepting contributions yet. Small fixes may be considered. 
 
 ## Documentation
 
+For the Valhalla2 fork's Jira and shared-memory pilot setup, see the
+[Valhalla2 operations guide](docs/operations/valhalla2.md). T3 development instructions remain in
+[docs/operations/development.md](docs/operations/development.md).
+
 Full docs live in [docs/](./docs). There's no docs site yet.
 
 - [FAQ](./docs/user/faq.md)

@@ -1,3 +1,5 @@
+import * as Valhalla from "./valhalla2/ValhallaService.ts";
+import * as ValhallaOwner from "./valhalla2/owner.ts";
 import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -1353,6 +1355,8 @@ export const layerWsRpc = (
   Layer.effectContext(
     Effect.gen(function* () {
       const currentSessionId = currentSession.sessionId;
+      const valhallaOwnerId = ValhallaOwner.ownerIdForSession(currentSession);
+      const valhalla = yield* Valhalla.ValhallaService;
       const sql = yield* SqlClient.SqlClient;
       const threadManagement = yield* ThreadManagementService.ThreadManagementService;
       const intakeContext = yield* Effect.context<
@@ -1996,6 +2000,8 @@ export const layerWsRpc = (
       });
 
       const handlers = ServerWsRpcGroup.of({
+        [WS_METHODS.valhalla2GetSnapshot]: () => valhalla.snapshot(valhallaOwnerId),
+        [WS_METHODS.valhalla2Command]: (input) => valhalla.command(input.command, valhallaOwnerId),
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
@@ -3417,6 +3423,7 @@ export const WS_RPC_SERVER_OPTIONS = {
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
     const serverBrowser = yield* ServerBrowser.ServerBrowser;
+    const valhalla = yield* Valhalla.ValhallaService;
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const npmRelease = yield* NpmRelease.NpmRelease;
     const pullRequests = yield* PullRequestService.PullRequestService;
@@ -3493,6 +3500,7 @@ export const layer = Layer.unwrap(
               reportProfiles,
               readSettingsClient(url.value),
             ).pipe(
+              Layer.provide(Layer.succeed(Valhalla.ValhallaService, valhalla)),
               Layer.provideMerge(RpcSerialization.layerJson),
               // Handler-context reporters see only request defects, not server-wide defects.
               Layer.provide(DefectReporter.layer),

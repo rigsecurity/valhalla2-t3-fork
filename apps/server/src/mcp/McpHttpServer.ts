@@ -78,6 +78,8 @@ import {
 } from "./toolkits/device/tools.ts";
 import * as HtmlHandlers from "./toolkits/html/handlers.ts";
 import { HtmlPreviewTool, HtmlPreviewToolkit, HtmlRenderToolkit } from "./toolkits/html/tools.ts";
+import { MemorywellToolkit } from "./toolkits/memorywell/tools.ts";
+import * as MemorywellHandlers from "./toolkits/memorywell/handlers.ts";
 import { requestUrl } from "../requestUrl.ts";
 
 const mcpResourceMetadataUrl = (request: HttpServerRequest.HttpServerRequest) =>
@@ -1194,6 +1196,7 @@ export const layerMcpTransport = <RA, RE, RR>(registrations: Layer.Layer<RA, RE,
 
 /** Every tool the T3 MCP server advertises. AgentContextBudget.test.ts measures this set. */
 export const layerTools = Layer.mergeAll(
+  toolkitRegistration(MemorywellToolkit, MemorywellHandlers.layer),
   layerPreviewToolkit,
   layerOrchestratorToolkit,
   layerThreadToolkit,
