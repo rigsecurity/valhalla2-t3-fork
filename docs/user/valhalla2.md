@@ -7,8 +7,10 @@ The workspace is available on web and desktop,
 including the web app at phone widths. There is no dedicated native mobile workspace yet;
 ordinary agent threads remain available in T3's mobile app.
 
-New chats open with a line from a movie or a riff on one. The line stays with the draft.
-Choose a project below it or use **Start without a project** to work in a scratch space.
+New chats open with one of 60 movie lines, with the film credited below it. The line stays
+with the draft. Choose a project below it or use **Start without a project** to work in a
+scratch space. The lines were checked against the [Wikiquote film catalog](https://en.wikiquote.org/wiki/Category:Films)
+and studio sources.
 
 ## Knowledge that carries forward
 
