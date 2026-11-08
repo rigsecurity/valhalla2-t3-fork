@@ -1,22 +1,19 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { ValhallaSnapshot } from "@rig/valhalla2/contracts";
 import { ValhallaCommandSchema } from "@rig/valhalla2/commands";
-import { ValhallaSnapshotSchema } from "@rig/valhalla2/snapshot";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ValhallaSnapshotSection } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
-import * as Cause from "effect/Cause";
 import {
   BookOpenIcon,
   ChartNoAxesColumnIcon,
-  CheckIcon,
   RefreshCwIcon,
   SlidersHorizontalIcon,
 } from "lucide-react";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useState } from "react";
 import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
 import { useProjects } from "../../state/entities";
+import { formatEnvironmentQueryError, useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { getValhalla2Snapshot, runValhalla2Command } from "../../state/valhalla2";
+import { valhalla2Snapshot, runValhalla2Command } from "../../state/valhalla2";
 import { Button } from "../ui/button";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
@@ -40,12 +37,16 @@ const sections = [
 ] as const;
 
 function EnvironmentWorkspace({ environmentId }: { environmentId: EnvironmentId }) {
-  const [snapshot, setSnapshot] = useState<ValhallaSnapshot | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [commandError, setCommandError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [section, setSection] = useState<(typeof sections)[number]["id"]>("tickets");
-  const readSnapshot = useAtomCommand(getValhalla2Snapshot, { reportFailure: false });
+  const [section, setSection] = useState<ValhallaSnapshotSection>("tickets");
+  const {
+    data: snapshot,
+    error: readError,
+    isPending,
+    refresh,
+  } = useEnvironmentQuery(valhalla2Snapshot({ environmentId, input: { section } }));
+  const error = commandError ?? readError;
   const executeCommand = useAtomCommand(runValhalla2Command, { reportFailure: false });
   const canWrite = useAtomValue(runValhalla2Command.permissionAtom(environmentId));
   const canPublish = useAtomValue(
@@ -62,74 +63,22 @@ function EnvironmentWorkspace({ environmentId }: { environmentId: EnvironmentId 
     (project) => project.environmentId === environmentId && !project.isScratch,
   );
 
-  async function refresh() {
-    setRefreshing(true);
-    const result = await readSnapshot({ environmentId, input: {} });
-    setRefreshing(false);
-    if (result._tag === "Failure") {
-      setError(Cause.pretty(result.cause));
-      return;
-    }
-    const parsed = ValhallaSnapshotSchema.safeParse(result.value);
-    if (!parsed.success) {
-      setError(
-        "This environment returned an incompatible workspace. Update the app and server together.",
-      );
-      return;
-    }
-    setSnapshot(parsed.data);
-    setError(null);
-  }
-
-  const load = useEffectEvent(
-    (receive: (value: ValhallaSnapshot | null, message: string | null) => void) => {
-      void readSnapshot({ environmentId, input: {} }).then((result) => {
-        if (result._tag === "Failure") {
-          receive(null, Cause.pretty(result.cause));
-          return;
-        }
-        const parsed = ValhallaSnapshotSchema.safeParse(result.value);
-        receive(
-          parsed.success ? parsed.data : null,
-          parsed.success
-            ? null
-            : "This environment returned an incompatible workspace. Update the app and server together.",
-        );
-      });
-    },
-  );
-
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reads the selected environment when its workspace opens
-  useEffect(() => {
-    let active = true;
-    load((value, message) => {
-      if (active) {
-        setSnapshot(value);
-        setError(message);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   async function command(value: Record<string, unknown>): Promise<unknown | null> {
     if (busy || !canWrite) return null;
     const parsedCommand = ValhallaCommandSchema.safeParse(value);
     if (!parsedCommand.success) {
-      setError("Some fields are missing or invalid. Check the form and try again.");
+      setCommandError("Some fields are missing or invalid. Check the form and try again.");
       return null;
     }
     setBusy(true);
-    setError(null);
+    setCommandError(null);
     const result = await executeCommand({ environmentId, input: { command: parsedCommand.data } });
+    setBusy(false);
     if (result._tag === "Failure") {
-      setBusy(false);
-      setError(Cause.pretty(result.cause));
+      setCommandError(formatEnvironmentQueryError(result.cause));
       return null;
     }
-    await refresh();
-    setBusy(false);
+    if (parsedCommand.data.type !== "ticket.inspect") refresh();
     return result.value;
   }
 
@@ -143,7 +92,10 @@ function EnvironmentWorkspace({ environmentId }: { environmentId: EnvironmentId 
               variant={section === id ? "secondary" : "ghost"}
               size="sm"
               aria-pressed={section === id}
-              onClick={() => setSection(id)}
+              onClick={() => {
+                setCommandError(null);
+                setSection(id);
+              }}
             >
               <Icon />
               {label}
@@ -153,11 +105,14 @@ function EnvironmentWorkspace({ environmentId }: { environmentId: EnvironmentId 
         <Button
           variant="ghost"
           size="sm"
-          disabled={refreshing || busy}
-          onClick={() => void refresh()}
+          disabled={isPending || busy}
+          onClick={() => {
+            setCommandError(null);
+            refresh();
+          }}
         >
           <RefreshCwIcon />
-          {refreshing ? "Refreshing…" : "Refresh"}
+          {isPending ? "Refreshing…" : "Refresh"}
         </Button>
       </div>
       {error && (
@@ -172,27 +127,13 @@ function EnvironmentWorkspace({ environmentId }: { environmentId: EnvironmentId 
         <EmptyState title={error ? "Workspace unavailable" : "Loading your workspace…"}>
           {error
             ? "Check this environment's connection and refresh to try again."
-            : "Reading knowledge, workflows, ticket runs, and measurements."}
+            : `Opening ${sections.find(({ id }) => id === section)?.label.toLowerCase()}…`}
         </EmptyState>
       ) : (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-            <div className="flex flex-wrap gap-2">
-              <Badge variant={snapshot.health.memory === "ready" ? "success" : "warning"}>
-                Knowledge {snapshot.health.memory === "ready" ? "ready" : "unavailable"}
-              </Badge>
-              <Badge variant="outline">
-                {snapshot.health.sharedEndpoint ? "Memory endpoint available" : "Local memory only"}
-              </Badge>
-              <Badge variant={snapshot.health.jiraConfigured ? "success" : "secondary"}>
-                Jira {snapshot.health.jiraConfigured ? "configured" : "not configured"}
-              </Badge>
-            </div>
-            <span className="flex items-center gap-1">
-              <CheckIcon className="size-3" />
-              Knowledge, measurement, and isolated work are required
-            </span>
-          </div>
+          {section === "memory" && snapshot.health.memory !== "ready" && (
+            <Badge variant="warning">Shared knowledge is unavailable</Badge>
+          )}
           {!canWrite && (
             <p role="status" className="text-sm text-muted-foreground">
               This connection can view the workspace. Editing requires access to run workspace
@@ -253,39 +194,34 @@ export function Valhalla2Page() {
           <img src={rigMark} alt="Rig" width={25} height={22} />
           <span className="text-sm font-medium">Valhalla2</span>
         </div>
-        <div className="ml-auto w-48">
-          <Choice
-            label="Workspace environment"
-            value={environmentId ?? ""}
-            onChange={setSelection}
-            options={environments.map((environment) => ({
-              value: environment.environmentId,
-              label: environment.label,
-            }))}
-          />
-        </div>
+        {environments.length > 1 && (
+          <div className="ml-auto w-48 min-w-0">
+            <Choice
+              label="Workspace environment"
+              value={environmentId ?? ""}
+              onChange={setSelection}
+              options={environments.map((environment) => ({
+                value: environment.environmentId,
+                label: environment.label,
+              }))}
+            />
+          </div>
+        )}
       </header>
       <ScrollArea>
         <WorkspacePageContainer width="expanded">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-medium text-primary">RIG ENGINEERING</p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-                Work. Learn. Improve.
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+                Engineering workspace
               </h1>
-              <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-                Your way of working, with knowledge that carries forward and results you can
-                measure.
+              <p className="mt-1 text-sm text-muted-foreground">
+                Work from Jira tickets or start with your own workflow.
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" render={<Link to="/settings/general" />}>
-                Notifications
-              </Button>
-              <Button variant="outline" size="sm" render={<Link to="/settings/providers" />}>
-                Providers
-              </Button>
-            </div>
+            <Button variant="ghost" size="sm" render={<Link to="/settings/appearance" />}>
+              Appearance
+            </Button>
           </div>
           {environmentId ? (
             <EnvironmentWorkspace key={environmentId} environmentId={environmentId} />
@@ -294,10 +230,6 @@ export function Valhalla2Page() {
               Connect a Valhalla2 server to start working with your repositories.
             </EmptyState>
           )}
-          <p className="text-xs text-muted-foreground">
-            Built on T3 Code · Your existing threads, skills, queue, and steering controls stay
-            available.
-          </p>
         </WorkspacePageContainer>
       </ScrollArea>
     </div>

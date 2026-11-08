@@ -1,4 +1,9 @@
-import { ValhallaError, ValhallaCommand, ValhallaSnapshot } from "./valhalla2.ts";
+import {
+  ValhallaError,
+  ValhallaCommand,
+  ValhallaSnapshot,
+  ValhallaSnapshotSection,
+} from "./valhalla2.ts";
 import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
@@ -962,7 +967,7 @@ const WsServerPrepareTriageRpc = Rpc.make(WS_METHODS.serverPrepareTriage, {
 });
 
 const WsValhalla2GetSnapshotRpc = Rpc.make(WS_METHODS.valhalla2GetSnapshot, {
-  payload: Schema.Struct({}),
+  payload: Schema.Struct({ section: Schema.optionalKey(ValhallaSnapshotSection) }),
   success: ValhallaSnapshot,
   error: Schema.Union([ValhallaError, EnvironmentAuthorizationError]),
 });

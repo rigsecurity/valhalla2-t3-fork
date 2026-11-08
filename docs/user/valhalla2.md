@@ -1,7 +1,8 @@
 # Valhalla2
 
-Open **Valhalla2** in the sidebar, or search for it in the command palette. Choose the
-environment that owns your repository. The workspace is available on web and desktop,
+Open **Valhalla2** in the sidebar, or search for it in the command palette. If you have multiple
+environments, choose the one that owns your repository. Use **Appearance** to switch between
+light, dark, and system mode for the whole app. The workspace is available on web and desktop,
 including the web app at phone widths. There is no dedicated native mobile workspace yet;
 ordinary agent threads remain available in T3's mobile app.
 
@@ -15,9 +16,18 @@ Use **Read sources** to see what supports a note. Verified guidance takes preced
 topic has both kinds of note. For a manual addition, choose **Add a note** and include a source.
 Team-wide notes use the `common` scope and need verification.
 
-The workspace shows whether its memory endpoint is available. Engineers connected to the same
-environment share its memory. An endpoint on your machine does not automatically synchronize
+Engineers connected to the same environment share its memory. An endpoint on your machine does not automatically synchronize
 other environments; your administrator must configure access to a shared service.
+
+Ticket implementers and reviewers receive the repository's `testing/how-to-verify` note when
+one is available. The short recipe points to test commands and setup details agents have
+confirmed. They check it against the current checkout before using it. A verified recipe takes
+priority over a captured one.
+
+The [rig-verify-work skill](../../.agents/skills/rig-verify-work/SKILL.md) gives regular chats
+the same playbook for looking up and capturing useful verification steps. Install it once with
+your provider's project skills to make it available in that repository. It uses the repo's own
+test instructions when Memorywell is unavailable.
 
 ## Work your way
 
@@ -38,9 +48,6 @@ everyone to use the same skills or models. Existing threads, native skills, queu
 controls remain available. After changing provider skills or tools, use **Restart agent session**
 from the command palette and refresh the workspace.
 
-Choose **Notifications** to configure T3's existing completion and needs-input alerts.
-Notifications are optional and depend on permission from your browser or operating system.
-
 ## From a ticket to a pull request
 
 In **Ticket work**, enter a Jira key and choose **Read ticket**. Review the request, select a
@@ -53,6 +60,7 @@ in the thread. Use **Take over** to stop automation and continue in the work thr
 run** to end it. **Request repair** sends failed or reviewed work back to implementation within
 your profile's attempt limit. A failure stays visible with its reason; it is not counted as success.
 
+The ticket branch needs a committed change against its base before it can move to review.
 When a run is ready, inspect its work and review threads. **Review publication** shows the
 exact revision being approved. **Publish pull request** publishes that reviewed revision
 and opens a PR. If the revision changes, it must be checked again. Publishing does not

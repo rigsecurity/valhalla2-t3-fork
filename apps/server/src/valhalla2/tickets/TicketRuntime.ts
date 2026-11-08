@@ -33,6 +33,8 @@ export class TicketRuntimeError extends Schema.TaggedError<TicketRuntimeError>()
       "read",
       "interrupt",
       "uncommitted",
+      "wrong_branch",
+      "no_changes",
       "changed",
       "publish",
     ]),
@@ -55,7 +57,11 @@ export class TicketRuntimeError extends Schema.TaggedError<TicketRuntimeError>()
       case "interrupt":
         return "The agent could not be stopped. Open its chat to take control.";
       case "uncommitted":
-        return "Commit the changes and review them before publishing.";
+        return "Commit the changes before requesting review.";
+      case "wrong_branch":
+        return "Switch back to the ticket branch before requesting review.";
+      case "no_changes":
+        return "The ticket branch has no committed changes to review. Open the work chat to continue.";
       case "changed":
         return "The branch changed after review. Review its new commit before publishing.";
       case "publish":
@@ -94,7 +100,7 @@ export class TicketRuntime extends Context.Service<
     readonly read: (
       threadId: string,
     ) => Effect.Effect<TicketThreadState | null, TicketRuntimeError>;
-    readonly head: (worktreePath: string) => Effect.Effect<string, TicketRuntimeError>;
+    readonly reviewHead: (run: TicketRun) => Effect.Effect<string, TicketRuntimeError>;
     readonly interrupt: (
       run: TicketRun,
       threadId: string,
@@ -130,17 +136,8 @@ const make = Effect.gen(function* () {
     return prepared.text;
   });
 
-  const head = Effect.fn("TicketRuntime.head")(function* (worktreePath: string) {
-    const status = yield* workflow
-      .localStatus({ cwd: worktreePath })
-      .pipe(Effect.mapError(() => new TicketRuntimeError({ reason: "read" })));
-    if (status.hasWorkingTreeChanges)
-      return yield* new TicketRuntimeError({ reason: "uncommitted" });
-    const commit = yield* git
-      .resolveCommit({ cwd: worktreePath, revision: "HEAD" })
-      .pipe(Effect.mapError(() => new TicketRuntimeError({ reason: "read" })));
-    return commit.commitSha;
-  });
+  const reviewHead = (run: TicketRun) =>
+    resolveReviewHead(run).pipe(Effect.provideService(Git.GitVcsDriver, git));
 
   const read = Effect.fn("TicketRuntime.read")(function* (threadId: string) {
     const shell = yield* threads
@@ -261,7 +258,7 @@ const make = Effect.gen(function* () {
       return { runId: latest?.id ?? null, worktreePath: launched.projection.thread.worktreePath };
     }),
     read,
-    head,
+    reviewHead,
     interrupt: Effect.fn("TicketRuntime.interrupt")(function* (run, threadId) {
       yield* threads
         .interruptThread({
@@ -275,14 +272,14 @@ const make = Effect.gen(function* () {
     publish: Effect.fn("TicketRuntime.publish")(function* (run) {
       if (run.worktreePath === null || run.reviewedHeadSha === null)
         return yield* new TicketRuntimeError({ reason: "publish" });
-      const current = yield* head(run.worktreePath);
-      if (current !== run.reviewedHeadSha)
-        return yield* new TicketRuntimeError({ reason: "changed" });
       for (const threadId of [run.threadId, run.reviewerThreadId].filter((id) => id !== null)) {
         const state = yield* read(threadId);
         if (state?.hasBackgroundWork || state?.needsInput)
           return yield* new TicketRuntimeError({ reason: "changed" });
       }
+      const current = yield* reviewHead(run);
+      if (current !== run.reviewedHeadSha)
+        return yield* new TicketRuntimeError({ reason: "changed" });
       const result = yield* workflow
         .runStackedAction({
           actionId: `valhalla2:${run.id}:publish:${run.reviewedHeadSha}`,
@@ -299,3 +296,49 @@ const make = Effect.gen(function* () {
 });
 
 export const layer = Layer.effect(TicketRuntime, make);
+
+export const resolveReviewHead = Effect.fn("TicketRuntime.resolveReviewHead")(function* ({
+  worktreePath: cwd,
+  branch,
+  baseRef,
+}: Pick<TicketRun, "worktreePath" | "branch" | "baseRef">) {
+  const git = yield* Git.GitVcsDriver;
+  if (cwd === null || baseRef.startsWith("-"))
+    return yield* new TicketRuntimeError({ reason: "read" });
+  const check = Effect.gen(function* () {
+    const status = yield* git.statusDetailsLocal(cwd, {
+      includeDivergence: false,
+      includeBranchChanges: false,
+    });
+    if (!status.isRepo) return yield* new TicketRuntimeError({ reason: "read" });
+    if (status.branch !== branch) return yield* new TicketRuntimeError({ reason: "wrong_branch" });
+    if (status.hasWorkingTreeChanges)
+      return yield* new TicketRuntimeError({ reason: "uncommitted" });
+    const comparisonRef = yield* git.readConfigValue(cwd, `branch.${branch}.t3-merge-base-ref`);
+    const base = yield* git.resolveCommit({
+      cwd,
+      revision: comparisonRef?.startsWith("refs/remotes/") ? comparisonRef : baseRef,
+    });
+    const head = yield* git.resolveCommit({ cwd, revision: "HEAD" });
+    const { exitCode } = yield* git.execute({
+      operation: "TicketRuntime.checkCommittedChanges",
+      cwd,
+      args: [
+        "diff",
+        "--quiet",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--ignore-submodules=none",
+        `${base.commitSha}...${head.commitSha}`,
+        "--",
+      ],
+      allowNonZeroExit: true,
+    });
+    if (exitCode === 0) return yield* new TicketRuntimeError({ reason: "no_changes" });
+    if (exitCode !== 1) return yield* new TicketRuntimeError({ reason: "read" });
+    return head.commitSha;
+  });
+  return yield* check.pipe(
+    Effect.catchTags({ GitCommandError: () => new TicketRuntimeError({ reason: "read" }) }),
+  );
+});

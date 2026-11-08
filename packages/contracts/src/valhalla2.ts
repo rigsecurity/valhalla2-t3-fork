@@ -15,4 +15,11 @@ const validated = <A>(validator: {
   });
 
 export const ValhallaCommand = validated(ValhallaCommandSchema);
+export const ValhallaSnapshotSection = Schema.Literals([
+  "tickets",
+  "memory",
+  "workflows",
+  "results",
+]);
+export type ValhallaSnapshotSection = typeof ValhallaSnapshotSection.Type;
 export const ValhallaSnapshot = validated(ValhallaSnapshotSchema);

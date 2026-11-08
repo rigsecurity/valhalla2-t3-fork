@@ -1,7 +1,8 @@
 import { ValhallaCommandSchema } from "@rig/valhalla2/commands";
 import { teamPolicy, type ValhallaSnapshot } from "@rig/valhalla2/contracts";
+import { summarizeOutcomes } from "@rig/valhalla2/outcomes";
 import { ValhallaSnapshotSchema } from "@rig/valhalla2/snapshot";
-import { ValhallaError } from "@t3tools/contracts";
+import { ValhallaError, type ValhallaSnapshotSection } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -13,7 +14,10 @@ import * as Launcher from "./WorkflowLauncher.ts";
 export class ValhallaService extends Context.Service<
   ValhallaService,
   {
-    readonly snapshot: (ownerId: string) => Effect.Effect<ValhallaSnapshot, ValhallaError>;
+    readonly snapshot: (
+      ownerId: string,
+      section?: ValhallaSnapshotSection,
+    ) => Effect.Effect<ValhallaSnapshot, ValhallaError>;
     readonly command: (input: unknown, ownerId: string) => Effect.Effect<unknown, ValhallaError>;
   }
 >()("t3/valhalla2/ValhallaService") {}
@@ -33,11 +37,15 @@ const make = Effect.gen(function* () {
         }),
     });
   return ValhallaService.of({
-    snapshot: Effect.fn("ValhallaService.snapshot")(function* (ownerId) {
-      const runs = yield* tickets
-        .list(ownerId)
-        .pipe(Effect.mapError((error) => new ValhallaError({ message: error.message })));
-      const available = yield* providers.getProviders;
+    snapshot: Effect.fn("ValhallaService.snapshot")(function* (ownerId, section) {
+      const runs =
+        !section || section === "tickets"
+          ? yield* tickets
+              .list(ownerId)
+              .pipe(Effect.mapError((error) => new ValhallaError({ message: error.message })))
+          : [];
+      const includeSkills = !section || section === "workflows";
+      const available = includeSkills ? yield* providers.getProviders : [];
       const availableSkills = [
         ...new Set(
           available
@@ -51,21 +59,23 @@ const make = Effect.gen(function* () {
       ].sort();
       return yield* attempt(() => {
         const profiles = store.profilesFor(ownerId);
+        const selected = profiles.selected();
+        const outcomes = !section || section === "results" ? store.roi.list() : [];
         return ValhallaSnapshotSchema.parse({
           profiles: profiles.list(),
-          selectedProfileId: profiles.selected().id,
-          memory: store.memory.list({ limit: 1000 }),
-          outcomes: store.roi.list(),
-          roi: store.roi.summary(),
+          selectedProfileId: selected.id,
+          memory: !section || section === "memory" ? store.memory.list({ limit: 1000 }) : [],
+          outcomes,
+          roi: summarizeOutcomes(outcomes),
           runs,
           health: {
             jiraConfigured: tickets.jiraConfigured,
             memory: "ready",
             sharedEndpoint: "/mcp",
             availableSkills,
-            missingSkills: profiles
-              .selected()
-              .skills.filter((name) => !availableSkills.includes(name)),
+            missingSkills: includeSkills
+              ? selected.skills.filter((name) => !availableSkills.includes(name))
+              : [],
           },
           policy: teamPolicy,
         });

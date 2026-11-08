@@ -89,7 +89,7 @@ function fixture(db: NodeSqlite.DatabaseSync) {
         return receipt;
       }),
     read: (id) => Effect.sync(() => state.threads.get(id) ?? null),
-    head: () => Effect.sync(() => state.head),
+    reviewHead: () => Effect.sync(() => state.head),
     interrupt: (_run, id) =>
       Effect.sync(() => {
         state.interrupted.push(id);
@@ -152,6 +152,22 @@ it.effect(
       Effect.gen(function* () {
         const db = yield* database;
         const fixtureRun = fixture(db);
+        const recipe = {
+          scope: "github.com/acme/service",
+          topic: "testing/how-to-verify",
+          title: "Testing this repository",
+          summary: "Use the isolated verification script.",
+          content: "Run ./scripts/check-local in a disposable worktree.",
+          reason: "convention" as const,
+          sources: ["scripts/check-local"],
+          roles: ["implementer", "verifier"],
+          idempotencyKey: "verification-recipe",
+        };
+        const saved = fixtureRun.store.memory.capture(recipe, "tester");
+        const unrelated = fixtureRun.store.memory.capture(
+          { ...recipe, scope: "github.com/acme/other", idempotencyKey: "other-recipe" },
+          "tester",
+        );
         yield* Effect.gen(function* () {
           const service = yield* Workflow.TicketWorkflow;
           const started = yield* service.start(input, "alice");
@@ -169,11 +185,15 @@ it.effect(
           const implementing = yield* service.get({ id: started.id }, "alice");
           assert.strictEqual(implementing.stage, "implement");
           assert.strictEqual(fixtureRun.state.delivered[1]!.model, "sonnet");
+          assert.notInclude(fixtureRun.state.delivered[0]!.prompt, saved.id);
+          assert.include(fixtureRun.state.delivered[1]!.prompt, saved.id);
           fixtureRun.complete(started.threadId);
           yield* service.tick;
           const reviewing = yield* service.get({ id: started.id }, "alice");
           assert.strictEqual(reviewing.stage, "review");
           assert.notEqual(reviewing.reviewerThreadId, reviewing.threadId);
+          assert.include(fixtureRun.state.delivered[2]!.prompt, saved.id);
+          assert.notInclude(fixtureRun.state.delivered[2]!.prompt, unrelated.id);
           fixtureRun.complete(reviewing.reviewerThreadId!);
           yield* service.tick;
           const ready = yield* service.get({ id: started.id }, "alice");

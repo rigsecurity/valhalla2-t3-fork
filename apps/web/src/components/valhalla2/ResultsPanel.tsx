@@ -331,7 +331,9 @@ export function ResultsPanel({
                     {outcome.ticketKey || outcome.repository}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {outcome.profileId} · {outcome.model}
+                    {snapshot.profiles.find(({ id }) => id === outcome.profileId)?.name ??
+                      outcome.profileId}{" "}
+                    · {outcome.model}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

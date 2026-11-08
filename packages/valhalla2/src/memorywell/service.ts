@@ -105,14 +105,20 @@ export class Memorywell {
 
   list(input: ListInput = {}): MemoryRecord[] {
     const query = ListInputSchema.parse(input);
-    return this.store
-      .all()
+    return this.store.list(query.limit, query.scope, query.status);
+  }
+
+  verificationRecipe(scope: string, role: "implementer" | "reviewer"): MemoryRecord | undefined {
+    const entries = this.store.recall([scope], "testing/how-to-verify");
+    const verified = entries.find((record) => record.status === "verified");
+    return (verified ? [verified] : entries)
       .filter(
-        (record) =>
-          (!query.scope || record.scope === query.scope) &&
-          (!query.status || record.status === query.status),
+        ({ roles }) =>
+          roles.length === 0 ||
+          roles.includes(role) ||
+          (role === "reviewer" && roles.includes("verifier")),
       )
-      .slice(0, query.limit);
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id))[0];
   }
 
   retrieve(input: RetrieveInput): { items: MemoryRecord[] } {

@@ -899,6 +899,37 @@ export function createEnvironmentRpcQueryAtomFamily<
   });
 }
 
+export function createEnvironmentGuardedRpcQueryAtomFamily<
+  R,
+  ER,
+  TTag extends Extract<EnvironmentUnaryRpcTag, ClientGuardedRpcTag>,
+>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
+  {
+    tag,
+    ...options
+  }: {
+    readonly label: string;
+    readonly tag: TTag;
+    readonly idleTtlMs?: number;
+    readonly staleTimeMs?: number;
+  },
+) {
+  const permissions = createCommandPermissions(runtime, tag);
+  return createEnvironmentQueryAtomFamily(runtime, {
+    ...options,
+    execute: (input: EnvironmentRpcInput<TTag>) =>
+      Effect.flatMap(AtomRegistry.AtomRegistry, (registry) =>
+        requestGuarded(tag, input).pipe(
+          Effect.provideService(RpcPermissionGuard, {
+            authorize: (environmentId, _method, payload) =>
+              permissions.authorize(registry, environmentId, payload),
+          }),
+        ),
+      ),
+  });
+}
+
 export function createEnvironmentRpcSubscriptionAtomFamily<
   R,
   ER,

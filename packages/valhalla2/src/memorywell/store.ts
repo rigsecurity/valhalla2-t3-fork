@@ -53,20 +53,27 @@ export class MemoryStore {
     `);
   }
 
-  all(): MemoryRecord[] {
+  list(limit: number, scope?: string, status?: MemoryRecord["status"]): MemoryRecord[] {
+    const filters = [
+      scope === undefined ? null : "scope = ?",
+      status === undefined ? null : "status = ?",
+    ].filter(Boolean);
+    const values = [scope, status].filter((value) => value !== undefined);
     return this.db
-      .prepare("SELECT record FROM valhalla2_memory ORDER BY rowid DESC")
-      .all()
+      .prepare(
+        `SELECT record FROM valhalla2_memory${filters.length > 0 ? ` WHERE ${filters.join(" AND ")}` : ""} ORDER BY rowid DESC LIMIT ?`,
+      )
+      .all(...values, limit)
       .map((row) => MemoryRecordSchema.parse(JSON.parse(String(row.record))));
   }
 
-  recall(scopes: readonly string[]): MemoryRecord[] {
+  recall(scopes: readonly string[], topic?: string): MemoryRecord[] {
     const placeholders = scopes.map(() => "?").join(", ");
     return this.db
       .prepare(
-        `SELECT record FROM valhalla2_memory WHERE scope IN (${placeholders}) AND status IN ('captured', 'verified')`,
+        `SELECT record FROM valhalla2_memory WHERE scope IN (${placeholders}) AND status IN ('captured', 'verified')${topic === undefined ? "" : " AND topic = ?"}`,
       )
-      .all(...scopes)
+      .all(...scopes, ...(topic === undefined ? [] : [topic]))
       .map((row) => MemoryRecordSchema.parse(JSON.parse(String(row.record))));
   }
 

@@ -175,15 +175,24 @@ const make = Effect.gen(function* () {
     yield* record(persisted);
     const scopes = MemoryScopeSchema.safeParse(run.repository);
     const notes = yield* Effect.try({
-      try: () =>
-        store.memory.retrieve({
+      try: () => {
+        const role =
+          run.stage === "plan" ? "planner" : run.stage === "implement" ? "implementer" : "reviewer";
+        const { items } = store.memory.retrieve({
           scopes: scopes.success ? [scopes.data, "common"] : ["common"],
           query: `${run.ticket.title}\n${run.ticket.description}`.slice(0, 4000),
+          role,
           limit: 6,
-        }),
+        });
+        const recipe =
+          scopes.success && scopes.data !== "common" && role !== "planner"
+            ? store.memory.verificationRecipe(scopes.data, role)
+            : undefined;
+        return recipe ? [recipe, ...items.filter((note) => note.id !== recipe.id)] : items;
+      },
       catch: () => new TicketWorkflowError({ reason: "storage" }),
     });
-    const prompt = ticketPrompt(run, boundedMemoryContext(notes.items));
+    const prompt = ticketPrompt(run, boundedMemoryContext(notes));
     return yield* runtime.deliver(persisted, prompt).pipe(
       Effect.flatMap((sent) =>
         save({
@@ -248,7 +257,7 @@ const make = Effect.gen(function* () {
     }
     if (run.worktreePath === null)
       return yield* markFailed(run, "The task has no isolated worktree to review.");
-    const head = yield* runtime.head(run.worktreePath).pipe(
+    const head = yield* runtime.reviewHead(run).pipe(
       Effect.catchTags({
         ValhallaTicketRuntimeError: (error) => markFailed(run, error.message).pipe(Effect.as(null)),
       }),
@@ -448,7 +457,7 @@ const make = Effect.gen(function* () {
             return yield* new TicketWorkflowError({ reason: "changed" });
           if (
             run.worktreePath === null ||
-            (yield* runtime.head(run.worktreePath)) !== input.approvedHeadSha
+            (yield* runtime.reviewHead(run)) !== input.approvedHeadSha
           )
             return yield* new TicketWorkflowError({ reason: "changed" });
           const pending = yield* save({ ...run, status: "publishing", error: null });

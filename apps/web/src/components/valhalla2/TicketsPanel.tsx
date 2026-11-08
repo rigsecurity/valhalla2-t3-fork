@@ -25,12 +25,14 @@ const statusLabel: Record<TicketRun["status"], string> = {
 
 function TicketRunCard({
   run,
+  profileName,
   environmentId,
   onCommand,
   busy,
   canPublish,
 }: {
   run: TicketRun;
+  profileName: string;
   environmentId: EnvironmentId;
   onCommand: WorkspaceCommand;
   busy: boolean;
@@ -60,8 +62,7 @@ function TicketRunCard({
         </Badge>
       </div>
       <p className="mt-3 break-words text-xs text-muted-foreground">
-        {run.branch} · {run.profileId} · {run.repairAttempts}/{run.maxRepairAttempts} repair
-        attempts
+        {run.branch} · {profileName} · {run.repairAttempts}/{run.maxRepairAttempts} repair attempts
       </p>
       {run.error && (
         <p className="mt-3 rounded-md bg-destructive/8 p-3 text-xs text-destructive-foreground">
@@ -375,6 +376,9 @@ export function TicketsPanel({
               <TicketRunCard
                 key={run.id}
                 run={run}
+                profileName={
+                  snapshot.profiles.find(({ id }) => id === run.profileId)?.name ?? run.profileId
+                }
                 environmentId={environmentId}
                 onCommand={onCommand}
                 busy={busy}

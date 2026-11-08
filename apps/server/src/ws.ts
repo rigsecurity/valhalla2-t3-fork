@@ -2000,7 +2000,8 @@ export const layerWsRpc = (
       });
 
       const handlers = ServerWsRpcGroup.of({
-        [WS_METHODS.valhalla2GetSnapshot]: () => valhalla.snapshot(valhallaOwnerId),
+        [WS_METHODS.valhalla2GetSnapshot]: (input) =>
+          valhalla.snapshot(valhallaOwnerId, input.section),
         [WS_METHODS.valhalla2Command]: (input) => valhalla.command(input.command, valhallaOwnerId),
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
