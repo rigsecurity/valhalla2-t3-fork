@@ -4,6 +4,7 @@ import {
   AuthOrchestrationReadScope,
   EnvironmentId,
   ProjectId,
+  ThreadId,
   type AgentSessionProjectCandidate,
   type AuthEnvironmentScope,
   type AuthSessionState,
@@ -37,6 +38,7 @@ const state = vi.hoisted(() => ({
   scan: vi.fn(),
   refreshScan: vi.fn(),
   waitForProject: vi.fn(),
+  waitForThreadShell: vi.fn(),
 }));
 
 vi.mock(import("@t3tools/client-runtime/state/session"), async (original) => {
@@ -92,6 +94,7 @@ vi.mock(import("../../state/entities"), async (original) => {
     useProjects: (() => useAtomValue(state.projects as Atom.Atom<Project[]>)) as never,
     readProjects: (() => appAtomRegistry.get(state.projects as Atom.Atom<Project[]>)) as never,
     waitForProject: ((ref: unknown) => state.waitForProject(ref)) as never,
+    waitForThreadShell: ((ref: unknown) => state.waitForThreadShell(ref)) as never,
   };
 });
 vi.mock(import("../../state/projects"), async (original) => ({
@@ -132,7 +135,7 @@ vi.mock(import("../settings/ChatGptWelcomeCoordinator"), async (original) => ({
 }));
 
 import { appAtomRegistry } from "../../rpc/atomRegistry";
-import { WelcomeWizard } from "./WelcomeWizard";
+import { ImportChatsDialog, WelcomeWizard } from "./WelcomeWizard";
 
 const primaryId = EnvironmentId.make("primary");
 const remoteId = EnvironmentId.make("remote");
@@ -289,8 +292,40 @@ function setup() {
   state.scan.mockReset();
   state.refreshScan.mockReset();
   state.waitForProject.mockReset().mockImplementation(waitForRecordedProject);
+  state.waitForThreadShell.mockReset().mockResolvedValue(true);
   return now;
 }
+
+it("imports an explicitly selected existing project after setup and opens its chat", async () => {
+  using _now = setup();
+  const projectId = ProjectId.make("existing-project");
+  const threadId = ThreadId.make("import:codex:saved-thread");
+  state.candidates = [{ ...candidate("/projects/existing"), projectId, alreadyImported: true }];
+  state.importThreads.mockResolvedValue(
+    AsyncResult.success({ importedCount: 1, skippedCount: 0, latestThreadId: threadId }),
+  );
+  await using screen = await render(
+    <RegistryContext.Provider value={appAtomRegistry}>
+      <ImportChatsDialog onClose={state.onDone} />
+    </RegistryContext.Provider>,
+  );
+  expect(button("Import chats").disabled).toBe(true);
+  await click("Select all");
+  await click("Import chats");
+
+  expect(state.createProject).not.toHaveBeenCalled();
+  expect(state.importThreads).toHaveBeenCalledExactlyOnceWith({
+    environmentId: primaryId,
+    input: { projectId, expectedWorkspaceRoot: "/projects/existing" },
+  });
+  expect(state.completeOnboarding).not.toHaveBeenCalled();
+  expect(state.onDone).toHaveBeenCalledOnce();
+  await vi.waitFor(() => {
+    expect(decodeURIComponent(screen.router?.state.location.pathname ?? "")).toBe(
+      "/primary/import:codex:saved-thread",
+    );
+  });
+});
 
 it("keeps the project selection after going back a stage", async () => {
   using _now = setup();

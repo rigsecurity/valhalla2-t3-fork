@@ -293,7 +293,11 @@ it.effect(
         unownedPi,
       ]);
 
-      expect(yield* importer.run).toEqual({ importedCount: 3, skippedCount: 0 });
+      expect(yield* importer.run).toEqual({
+        importedCount: 3,
+        skippedCount: 0,
+        latestThreadId: importId(otherInstance),
+      });
       for (const source of [active, archived, deleted, ownedPi]) {
         const threadId = importId(source);
         expect(yield* Effect.option(projections.getThread(threadId))).toEqual(Option.none());
@@ -407,8 +411,16 @@ it.effect(
       expect(yield* runtimes.list()).toEqual([]);
       yield* sql`DROP TRIGGER fail_runtime`;
 
-      expect(yield* importer.run).toEqual({ importedCount: 1, skippedCount: 0 });
-      expect(yield* importer.run).toEqual({ importedCount: 1, skippedCount: 0 });
+      expect(yield* importer.run).toEqual({
+        importedCount: 1,
+        skippedCount: 0,
+        latestThreadId: threadId,
+      });
+      expect(yield* importer.run).toEqual({
+        importedCount: 1,
+        skippedCount: 0,
+        latestThreadId: threadId,
+      });
       expect(yield* events.read({ threadId }).pipe(Stream.runCollect)).toEqual(committed);
       expect(importer.published).toHaveLength(6);
       expect(
@@ -442,7 +454,11 @@ it.effect("imports under a policy ceiling in the project's default, kept under t
         },
       ),
     );
-    expect(yield* importer.run).toEqual({ importedCount: 1, skippedCount: 0 });
+    expect(yield* importer.run).toEqual({
+      importedCount: 1,
+      skippedCount: 0,
+      latestThreadId: threadId,
+    });
     expect((yield* projections.getThread(threadId)).runtimeMode).toBe("auto-accept-edits");
     expect(Option.getOrThrow(yield* runtimes.getByThreadId({ threadId })).runtimeMode).toBe(
       "auto-accept-edits",

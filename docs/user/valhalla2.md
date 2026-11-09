@@ -14,6 +14,16 @@ a project below it or use **Start without a project** to work in a scratch space
 were checked against the [Wikiquote film catalog](https://en.wikiquote.org/wiki/Category:Films)
 and studio sources.
 
+## Bring in an existing chat
+
+Open **Import chats** from the command palette or **Add project** on web or desktop. Choose the
+project folders on the computer where your Claude Code or Codex chats are saved. Valhalla2 imports
+recent messages into its thread history and keeps the original provider session for your next turn.
+Finish any running turn in the original client before continuing in Valhalla2.
+
+The importer looks for chats active in the last 30 days. See the [history limits](welcome-wizard.md#import-your-projects)
+for what appears in the imported thread.
+
 ## Knowledge that carries forward
 
 Agents save useful findings after costly research, confirming a repo convention, or finding a

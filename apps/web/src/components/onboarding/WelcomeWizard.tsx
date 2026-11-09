@@ -6,10 +6,12 @@ import type {
   ProjectId,
   ProviderInstanceId,
   ScopedProjectRef,
+  ScopedThreadRef,
   ServerConfig,
   ServerProvider,
 } from "@t3tools/contracts";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { canCreateProjectInEnvironment } from "@t3tools/client-runtime/operations/projects";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -24,6 +26,7 @@ import {
   ProviderDriverKind,
   ThreadId,
 } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 import {
   ArrowRightIcon,
@@ -59,7 +62,7 @@ import {
 } from "../../onboarding/providerReadiness.logic";
 import { newProjectId, randomUUID } from "../../lib/utils";
 import { agentSessionImport } from "../../state/agentSessions";
-import { readProjects, waitForProject } from "../../state/entities";
+import { readProjects, waitForProject, waitForThreadShell } from "../../state/entities";
 import { useEnvironments, usePrimaryEnvironment } from "../../state/environments";
 import {
   managedInstanceLocks,
@@ -107,6 +110,7 @@ import { Dialog } from "../ui/dialog";
 import { toastManager } from "../ui/toast";
 import { cn } from "../../lib/utils";
 import { formatRelativeTime } from "../../timestampFormat";
+import { buildThreadRouteParams } from "../../threadRoutes";
 
 type WizardStep = "connection" | "agents" | "import";
 const NO_ENVIRONMENTS: readonly EnvironmentId[] = [];
@@ -296,6 +300,86 @@ export function WelcomeWizard({
         </WizardPanel>
       </WizardPopup>
       <ChatGptWelcomeCoordinator />
+    </Dialog>
+  );
+}
+
+export function ImportChatsDialog({
+  environmentId,
+  onClose,
+}: {
+  readonly environmentId?: EnvironmentId | undefined;
+  readonly onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const { environments } = useEnvironments();
+  const writable = useEnvironmentsWithScope(environments, AuthOrchestrationOperateScope);
+  const environmentIds = environments
+    .filter(
+      (environment) =>
+        (environmentId === undefined || environment.environmentId === environmentId) &&
+        environment.entry.enabled &&
+        canCreateProjectInEnvironment(environment.connection.phase) &&
+        writable.has(environment.environmentId),
+    )
+    .map((environment) => environment.environmentId);
+  const scans = useProjectScans(environmentIds, { refreshCached: true });
+  const [importSelection, setImportSelection] = useState<ImportSelection | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+
+  return (
+    <Dialog
+      open
+      disablePointerDismissal={isImporting}
+      onOpenChange={(open, event) => {
+        if (open) return;
+        if (isImporting) event.cancel();
+        else onClose();
+      }}
+    >
+      <WizardPopup size="wide" data-app-modal>
+        <WizardHeader title="Import chats" />
+        <WizardPanel holdHeight={scans.some((scan) => scan.isPending)}>
+          {scans.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Connect to the computer that has your chats with permission to run threads.
+            </p>
+          ) : (
+            <ImportStep
+              scans={scans}
+              importSelection={importSelection}
+              onImportSelectionChange={setImportSelection}
+              isImporting={isImporting}
+              setIsImporting={setIsImporting}
+              onCancel={onClose}
+              onDone={async (_project, warning, count = 0, threadRef) => {
+                onClose();
+                if (warning) {
+                  toastManager.add({
+                    type: "warning",
+                    title: "Some chat history could not be imported",
+                    description: warning,
+                  });
+                } else if (count > 0) {
+                  toastManager.add({
+                    type: "success",
+                    title: `${count} ${count === 1 ? "chat is" : "chats are"} ready`,
+                  });
+                } else {
+                  toastManager.add({ type: "info", title: "No recent chats to import" });
+                }
+                if (threadRef && (await waitForThreadShell(threadRef))) {
+                  await navigate({
+                    to: "/$environmentId/$threadId",
+                    params: buildThreadRouteParams(threadRef),
+                  });
+                }
+                return true;
+              }}
+            />
+          )}
+        </WizardPanel>
+      </WizardPopup>
     </Dialog>
   );
 }
@@ -1204,6 +1288,7 @@ function ImportStep({
   onImportSelectionChange,
   isImporting,
   setIsImporting,
+  onCancel,
   onDone,
 }: {
   readonly scans: ReturnType<typeof useProjectScans>;
@@ -1211,10 +1296,12 @@ function ImportStep({
   readonly onImportSelectionChange: (next: ImportSelection) => void;
   readonly isImporting: boolean;
   readonly setIsImporting: (value: boolean) => void;
+  readonly onCancel?: () => void;
   readonly onDone: (
     projectRef?: ScopedProjectRef,
     importWarning?: string,
     importedThreadCount?: number,
+    threadRef?: ScopedThreadRef,
   ) => Promise<boolean>;
 }) {
   const { environments } = useEnvironments();
@@ -1223,6 +1310,7 @@ function ImportStep({
   const importThreads = useAtomCommand(agentSessionImport, { reportFailure: false });
   const importWarningRef = useRef("");
   const importedThreadCountRef = useRef(0);
+  const importedThreadRef = useRef<ScopedThreadRef | undefined>(undefined);
   const importedProjectsRef = useRef(new Map<string, ScopedProjectRef>());
   const projectsWithImportedHistoryRef = useRef(new Map<string, ScopedProjectRef>());
   const lastImportSelectionRef = useRef<ReadonlyArray<string>>([]);
@@ -1252,7 +1340,7 @@ function ImportStep({
   const selected = candidates.filter((candidate) =>
     importSelection?.environmentIds.has(candidate.environmentId)
       ? importSelection.keys.has(candidate.key)
-      : recentKeys.has(candidate.key),
+      : onCancel === undefined && recentKeys.has(candidate.key),
   );
   const selectedKeys = new Set(selected.map((candidate) => candidate.key));
   const setSelectedKeys = (keys: ReadonlySet<string>) =>
@@ -1274,6 +1362,15 @@ function ImportStep({
       : importError;
 
   const finishAfterImport = () => {
+    if (onCancel !== undefined) {
+      void onDone(
+        undefined,
+        importWarningRef.current,
+        importedThreadCountRef.current,
+        importedThreadRef.current,
+      );
+      return;
+    }
     const projectRef = resolveOnboardingLandingProject(
       lastImportSelectionRef.current,
       projectsWithImportedHistoryRef.current,
@@ -1324,6 +1421,7 @@ function ImportStep({
     setIsImporting(true);
     importWarningRef.current = "";
     importedThreadCountRef.current = 0;
+    importedThreadRef.current = undefined;
     lastImportSelectionRef.current = selection.map((candidate) => candidate.key);
     const importGeneration = importGenerationRef.current;
     const importedProjects = importedProjectsRef.current;
@@ -1403,6 +1501,12 @@ function ImportStep({
       if (threadImportResult._tag === "Success") {
         importedThreadCount += threadImportResult.value.importedCount;
         skippedThreadCount += threadImportResult.value.skippedCount;
+        if (threadImportResult.value.latestThreadId && importedThreadRef.current === undefined) {
+          importedThreadRef.current = scopeThreadRef(
+            environmentId,
+            threadImportResult.value.latestThreadId,
+          );
+        }
         if (threadImportResult.value.importedCount > 0) {
           projectsWithImportedHistoryRef.current.set(
             candidate.key,
@@ -1448,8 +1552,8 @@ function ImportStep({
           </p>
         </div>
         <div className="flex justify-end">
-          <Button variant="ghost-muted" onClick={() => void onDone()}>
-            Do not import projects
+          <Button variant="ghost-muted" onClick={onCancel ?? (() => void onDone())}>
+            {onCancel ? "Cancel" : "Do not import projects"}
           </Button>
         </div>
       </div>
@@ -1458,8 +1562,12 @@ function ImportStep({
 
   return (
     <StepShell
-      title="Import your projects"
-      description="Import projects and conversations from Claude Code and Codex on your selected computers."
+      title={onCancel ? "Choose projects" : "Import your projects"}
+      description={
+        onCancel
+          ? "Bring in chats active in the last 30 days from Claude Code, Codex, and Pi on your connected computers."
+          : "Import projects and conversations from Claude Code and Codex on your selected computers."
+      }
     >
       {candidates.length > 0 ? (
         <div className="mt-5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -1543,8 +1651,12 @@ function ImportStep({
         <p className="mt-3 text-sm text-destructive">{visibleImportError}</p>
       ) : null}
       <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
-        <Button variant="ghost-muted" disabled={isImporting} onClick={finishAfterImport}>
-          Do not import projects
+        <Button
+          variant="ghost-muted"
+          disabled={isImporting}
+          onClick={onCancel ?? finishAfterImport}
+        >
+          {onCancel ? "Cancel" : "Do not import projects"}
         </Button>
         <Button
           autoFocus
@@ -1553,7 +1665,9 @@ function ImportStep({
         >
           {isImporting
             ? "Importing…"
-            : `Import ${selected.length} ${selected.length === 1 ? "project" : "projects"}`}
+            : onCancel
+              ? "Import chats"
+              : `Import ${selected.length} ${selected.length === 1 ? "project" : "projects"}`}
         </Button>
       </div>
     </StepShell>

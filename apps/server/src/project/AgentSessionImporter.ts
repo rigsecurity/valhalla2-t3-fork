@@ -449,7 +449,22 @@ const make = Effect.gen(function* () {
       }),
     );
 
-    return { importedCount, skippedCount } satisfies AgentSessionImportResult;
+    const latestThreadId = yield* Effect.findFirst(importedThreadIds, (threadId) =>
+      orchestrator.getThreadRecords(threadId, []).pipe(
+        Effect.map(
+          ({ thread }) =>
+            thread.projectId === input.projectId &&
+            thread.archivedAt === null &&
+            thread.deletedAt === null,
+        ),
+        Effect.orElseSucceed(() => false),
+      ),
+    );
+    return {
+      importedCount,
+      skippedCount,
+      ...(Option.isSome(latestThreadId) ? { latestThreadId: latestThreadId.value } : {}),
+    } satisfies AgentSessionImportResult;
   });
 
   return { importRecentAgentThreads };

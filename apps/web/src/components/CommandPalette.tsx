@@ -63,6 +63,7 @@ import {
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
+  ImportIcon,
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
@@ -78,6 +79,8 @@ import {
 } from "lucide-react";
 import { openThreadFind } from "./chat/threadFindStore";
 import {
+  lazy,
+  Suspense,
   useDeferredValue,
   useEffect,
   useReducer,
@@ -266,6 +269,9 @@ import { threadRecentUse } from "@t3tools/shared/paletteSearch";
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 const ADD_PROJECT_ENTRY_GROUP = "add-project";
 const NEW_THREAD_IN_GROUP = "projects";
+const ImportChatsDialog = lazy(async () => ({
+  default: (await import("./onboarding/WelcomeWizard")).ImportChatsDialog,
+}));
 
 /** The submenu an open intent starts in; its groups resolve while rendering. */
 function openIntentView(intent: CommandPaletteOpenIntent | null): CommandPaletteView | null {
@@ -296,6 +302,9 @@ const NEW_THREAD_NO_PROJECT_VALUE = "new-thread-in:no-project";
 export function CommandPalette({ children }: { children: ReactNode }) {
   useCommandPaletteMount();
   const state = useCommandPaletteStore();
+  const [importTarget, setImportTarget] = useState<{
+    environmentId: EnvironmentId | undefined;
+  } | null>(null);
   const setOpen = (open: boolean) => dispatchCommandPalette({ _tag: "SetOpen", open });
   const openChildSearch = (mode: "files" | "content", context: CommandPaletteReturnContext) =>
     dispatchCommandPalette({ _tag: "OpenChildSearch", mode, context });
@@ -323,9 +332,18 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           openIntent={state.openIntent}
           setOpen={setOpen}
           openChildSearch={openChildSearch}
+          openImportChats={(environmentId) => setImportTarget({ environmentId })}
           initialContext={state.restoredSearch}
         />
       </CommandDialog>
+      {importTarget ? (
+        <Suspense fallback={null}>
+          <ImportChatsDialog
+            environmentId={importTarget.environmentId}
+            onClose={() => setImportTarget(null)}
+          />
+        </Suspense>
+      ) : null}
     </ComposerHandleContext>
   );
 }
@@ -339,6 +357,7 @@ function CommandPaletteDialog(props: {
     mode: "files" | "content",
     context: CommandPaletteReturnContext,
   ) => void;
+  readonly openImportChats: (environmentId?: EnvironmentId) => void;
   readonly initialContext: CommandPaletteReturnContext | undefined;
 }) {
   const composerHandleRef = useComposerHandleContext();
@@ -380,6 +399,7 @@ function CommandPaletteDialog(props: {
           openIntent={props.openIntent}
           setOpen={props.setOpen}
           openChildSearch={props.openChildSearch}
+          openImportChats={props.openImportChats}
           initialContext={props.initialContext}
         />
       )}
@@ -394,6 +414,7 @@ function OpenCommandPaletteDialog(props: {
     mode: "files" | "content",
     context: CommandPaletteReturnContext,
   ) => void;
+  readonly openImportChats: (environmentId?: EnvironmentId) => void;
   readonly initialContext: CommandPaletteReturnContext | undefined;
 }) {
   const navigate = useNavigate();
@@ -987,6 +1008,16 @@ function OpenCommandPaletteDialog(props: {
     void navigate({ to: "/settings/source-control" });
   };
 
+  const importChatsItem = (environmentId?: EnvironmentId): CommandPaletteActionItem => ({
+    kind: "action",
+    value: "action:import-chats",
+    title: "Import chats",
+    description: "Continue chats from Claude Code, Codex, or Pi",
+    searchTerms: ["import", "resume", "history", "claude", "codex", "sessions", "threads"],
+    icon: <ImportIcon className={ITEM_ICON_CLASS} />,
+    run: async () => props.openImportChats(environmentId),
+  });
+
   const buildAddProjectSourceGroups = (
     environmentId: EnvironmentId,
     readinessBySource: AddProjectRemoteSourceReadiness,
@@ -1089,6 +1120,7 @@ function OpenCommandPaletteDialog(props: {
       });
     }
 
+    sourceItems.push(importChatsItem(environmentId));
     return [{ value: `sources:${environmentId}`, label: "Sources", items: sourceItems }];
   };
 
@@ -1281,6 +1313,8 @@ function OpenCommandPaletteDialog(props: {
       run: () => startScratchThread(scratchTargetEnvironmentId),
     });
   }
+
+  actionItems.push(importChatsItem());
 
   if (triageEnvironmentId !== null && canTriage) {
     actionItems.push({
