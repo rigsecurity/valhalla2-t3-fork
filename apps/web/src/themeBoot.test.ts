@@ -369,12 +369,17 @@ describe("index.html boot script", () => {
     expect(boot.metaContent).toBe(DEFAULT_DARK_CHROME);
   });
 
-  it("follows the OS appearance when storage is unavailable", () => {
-    const light = runBootScript({ storageThrows: true, prefersDark: false });
-    expect(light.isDark).toBe(false);
-    expect(light.themeId).toBeUndefined();
-
-    const dark = runBootScript({ storageThrows: true, prefersDark: true });
-    expect(dark.isDark).toBe(true);
+  it("starts with the matching Rig palette when no preference is available", () => {
+    const rig = BUILT_IN_THEMES.find((theme) => theme.id === "rig")!;
+    for (const storageThrows of [false, true]) {
+      for (const mode of ["light", "dark"] as const) {
+        const boot = runBootScript({ storageThrows, prefersDark: mode === "dark" });
+        const colors = getThemeColorsForMode(rig, mode)!;
+        expect(boot.themeId).toBe("rig");
+        expect(boot.isDark).toBe(mode === "dark");
+        expect(boot.bootVariables["--boot-background"]).toBe(colors.canvas);
+        expect(boot.metaContent).toBe(colors.chrome);
+      }
+    }
   });
 });

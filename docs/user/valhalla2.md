@@ -2,7 +2,8 @@
 
 Open **Valhalla2** in the sidebar, or search for it in the command palette. If you have multiple
 environments, choose the one that owns your repository. Use **Appearance** to switch between
-light, dark, and system mode for the whole app, choose the Rig palette, or change your fonts.
+light, dark, and system mode for the whole app or change your fonts. A fresh web or desktop
+install starts with the Rig palette and follows the system appearance.
 The workspace is available on web and desktop,
 including the web app at phone widths. There is no dedicated native mobile workspace yet;
 ordinary agent threads remain available in T3's mobile app.

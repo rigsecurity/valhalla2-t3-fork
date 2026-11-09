@@ -1,30 +1,15 @@
 @reference "../../index.css";
 
-[data-rig-studio] {
-  --rig-accent: #1c694f;
-  --rig-glow: #35d2ae;
-
-  @variant dark {
-    --rig-accent: #59f5bd;
-    --rig-glow: #35d2ae;
-  }
-}
-
-html[data-theme-id] [data-rig-studio] {
-  --rig-accent: var(--primary);
-  --rig-glow: var(--ring);
-}
-
 [data-rig-atmosphere-wash] {
   background:
     radial-gradient(
       ellipse 57% 58% at 78% 41%,
-      color-mix(in oklab, var(--rig-glow) 20%, transparent),
+      color-mix(in oklab, var(--ring) 20%, transparent),
       transparent 100%
     ),
     radial-gradient(
       ellipse 42% 58% at 35% 85%,
-      color-mix(in oklab, var(--rig-accent) 9%, transparent),
+      color-mix(in oklab, var(--primary) 9%, transparent),
       transparent 95%
     );
 
@@ -36,7 +21,7 @@ html[data-theme-id] [data-rig-studio] {
 }
 
 [data-rig-atmosphere-contours] {
-  color: color-mix(in oklab, var(--rig-accent) 19%, transparent);
+  color: color-mix(in oklab, var(--primary) 19%, transparent);
   mask-image: radial-gradient(ellipse 68% 76% at 80% 52%, black 12%, transparent 96%);
 }
 

@@ -1,0 +1,8 @@
+{
+  "name": "Valhalla2",
+  "bundleId": "com.rigsecurity.valhalla2",
+  "scheme": "valhalla2",
+  "devScheme": "valhalla2-dev",
+  "iconPng": "assets/valhalla2/icon.png",
+  "iconIco": "assets/valhalla2/icon.ico"
+}

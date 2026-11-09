@@ -922,6 +922,7 @@ const RIG_THEME: ThemeDefinition = {
     toolbarControlHover: "#d7e8df",
     surface: "#fbfdfb",
     surfaceRaised: "#f8fcf9",
+    surfaceOverlay: "#fbfdfb",
     text: "#132c23",
     textMuted: "#456257",
     border: "#ceded4",
@@ -929,6 +930,7 @@ const RIG_THEME: ThemeDefinition = {
     focus: "#1c694f",
     accent: "#1c694f",
     accentForeground: "#f6fffa",
+    secondary: "#e7f0ea",
     muted: "#e7f0ea",
     mutedForeground: "#456257",
     accentSurface: "#dcefe4",
@@ -946,6 +948,10 @@ const RIG_THEME: ThemeDefinition = {
     sidebarRowActive: "#d6eade",
     sidebarRowSelected: "#d0e7db",
     sidebarBorder: "#ceded4",
+    terminalBackground: "#f3f8f5",
+    terminalForeground: "#132c23",
+    terminalCursor: "#1c694f",
+    terminalSelection: "#ceded4",
   },
   variants: {
     dark: {

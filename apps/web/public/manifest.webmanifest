@@ -1,21 +1,21 @@
 {
   "id": "/",
-  "name": "T3 Code",
-  "short_name": "T3 Code",
+  "name": "Valhalla2",
+  "short_name": "Valhalla2",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#161616",
-  "theme_color": "#161616",
+  "background_color": "#08120e",
+  "theme_color": "#0b1914",
   "icons": [
     {
-      "src": "/favicon-32x32.png",
-      "sizes": "32x32",
+      "src": "/valhalla2-192.png",
+      "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
+      "src": "/valhalla2-512.png",
+      "sizes": "512x512",
       "type": "image/png"
     }
   ]

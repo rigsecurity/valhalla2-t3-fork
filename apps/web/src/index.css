@@ -754,6 +754,23 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
      vellum, forest drafting paper, marine cyanotype, copper, and violet ink.
      These colors stay deliberately deep at the top edge so the white stage
      wordmark and controls retain contrast in both appearance modes. */
+  html[data-theme-id="rig"] {
+    --stage-art-top: color-mix(in oklab, var(--primary) 38%, #08120e);
+    --stage-art-mid: color-mix(in oklab, var(--primary) 24%, #08120e);
+    --stage-art-bottom: #08120e;
+    --stage-art-highlight: color-mix(in oklab, var(--primary) 30%, white);
+    --stage-art-secondary: var(--primary);
+    --stage-art-tertiary: var(--stage-art-highlight);
+    --stage-art-line: var(--stage-art-highlight);
+    --stage-night-base-top: var(--stage-art-top);
+    --stage-night-base-mid: var(--stage-art-mid);
+    --stage-night-base-bottom: var(--stage-art-bottom);
+    --stage-night-highlight: var(--stage-art-highlight);
+    --stage-night-secondary: var(--stage-art-secondary);
+    --stage-night-tertiary: var(--stage-art-tertiary);
+    --stage-night-line: var(--stage-art-line);
+  }
+
   html[data-theme-id="t3-chat"] {
     --stage-art-top: oklch(0.760675 0.141361 348.019);
     --stage-art-mid: oklch(0.588093 0.188832 353.138);
@@ -905,6 +922,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 
   :is(
+    html[data-theme-id="rig"],
     html[data-theme-id="t3-chat"],
     html[data-theme-id="grove"],
     html[data-theme-id="ocean"],

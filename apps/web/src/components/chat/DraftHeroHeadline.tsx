@@ -51,7 +51,7 @@ import {
 } from "../ui/combobox";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { InlineButton } from "../ui/button";
-import rigMark from "../branding/rig-mark.svg";
+import { RigMark } from "../branding/RigMark";
 import { DraftProjectName } from "./DraftProjectName";
 import { TriageDraftHero } from "./TriageDraftHero";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
@@ -412,8 +412,8 @@ export function DraftHeroHeadline({
   const opening = draftOpeningLine(draftId);
   return (
     <div className="mx-auto flex min-w-0 max-w-5xl flex-col gap-3 px-1 pb-2 sm:gap-4 sm:px-2 [@media(max-height:560px)]:gap-2">
-      <div className="flex items-center gap-2.5 font-mono text-2xs text-(--rig-accent) tracking-widest uppercase [@media(max-height:560px)]:hidden">
-        <img src={rigMark} alt="Rig" width={17} height={15} />
+      <div className="flex items-center gap-2.5 font-mono text-2xs text-primary tracking-widest uppercase [@media(max-height:560px)]:hidden">
+        <RigMark className="h-[15px] w-[17px]" />
         <span>New chat</span>
       </div>
       <div>

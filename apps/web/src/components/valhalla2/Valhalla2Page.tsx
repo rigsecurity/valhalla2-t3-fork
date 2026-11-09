@@ -28,8 +28,7 @@ import { WorkflowsPanel } from "./WorkflowsPanel";
 import { StartWorkflow } from "./StartWorkflow";
 import { Choice, EmptyState } from "./WorkspaceParts";
 import { RigAtmosphere } from "../branding/RigAtmosphere";
-import rigMark from "../branding/rig-mark.svg";
-import "./valhalla2.css";
+import { RigMark } from "../branding/RigMark";
 
 const sections = [
   { id: "tickets", label: "Ticket work", icon: PullRequestGlyph.pullRequest },
@@ -196,15 +195,11 @@ export function Valhalla2Page() {
     environments.find((environment) => environment.environmentId === (selection ?? primary))
       ?.environmentId ?? (selection === null ? environments[0]?.environmentId : undefined);
   return (
-    <div
-      data-valhalla2-workspace
-      data-rig-studio
-      className="flex h-full min-h-0 flex-col bg-background"
-    >
+    <div data-valhalla2-workspace className="flex h-full min-h-0 flex-col bg-background">
       <header className="flex min-h-[var(--workspace-topbar-height)] shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-1">
         <SidebarTrigger />
         <div className="flex shrink-0 items-center gap-2">
-          <img src={rigMark} alt="Rig" width={25} height={22} />
+          <RigMark className="h-[22px] w-[25px] text-primary" />
           <span className="text-sm font-medium">Valhalla2</span>
         </div>
         <div className="ml-auto flex min-w-0 items-center gap-2">
@@ -232,7 +227,7 @@ export function Valhalla2Page() {
           <div className="relative isolate overflow-hidden rounded-2xl border border-border bg-card px-5 py-8 sm:px-8 sm:py-11">
             <RigAtmosphere />
             <div className="relative">
-              <p className="mb-3 font-mono text-2xs text-(--rig-accent) tracking-widest uppercase">
+              <p className="mb-3 font-mono text-2xs text-primary tracking-widest uppercase">
                 Rig Engineering
               </p>
               <h1 className="text-balance font-semibold text-3xl tracking-tighter sm:text-4xl">

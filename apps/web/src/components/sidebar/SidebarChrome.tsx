@@ -20,8 +20,7 @@ import {
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
-import rigMark from "../branding/rig-mark.svg";
-import "../valhalla2/valhalla2.css";
+import { RigMark } from "../branding/RigMark";
 import {
   resolveEnvironmentIdentificationPillLabel,
   resolveSidebarStageBackdropVariant,
@@ -65,7 +64,6 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
 
   return (
     <div
-      data-valhalla2-sidebar-brand
       className={cn(
         "relative flex h-[var(--workspace-topbar-height)] shrink-0 flex-row items-center gap-2 pr-3",
         isElectron && "drag-region",
@@ -180,15 +178,15 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
       )}
       to="/"
     >
-      <SidebarBrandMark />
+      <SidebarBrandMark onBackdrop={onBackdrop} />
     </Link>
   );
 }
 
-function SidebarBrandMark() {
+function SidebarBrandMark({ onBackdrop = false }: { readonly onBackdrop?: boolean }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium tracking-tight">
-      <img src={rigMark} alt="" width={18} height={16} className="shrink-0" />
+      <RigMark className={cn("h-4 w-[18px]", !onBackdrop && "text-primary")} />
       <span className="truncate">Valhalla2</span>
     </span>
   );

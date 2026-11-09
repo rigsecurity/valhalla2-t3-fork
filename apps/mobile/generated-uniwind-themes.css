@@ -353,7 +353,7 @@
       --color-border-subtle: rgba(206, 222, 212, 0.7);
       --color-separator: rgba(206, 222, 212, 0.55);
       --color-subtle: #e7f0ea;
-      --color-subtle-strong: #fafafa;
+      --color-subtle-strong: #e7f0ea;
       --color-inline-skill-background: #dcefe4;
       --color-inline-skill-border: rgba(28, 105, 79, 0.42);
       --color-inline-skill-foreground: #173c2e;
@@ -363,12 +363,12 @@
       --color-primary-foreground: #f6fffa;
       --color-primary-text: #1c694f;
       --color-primary-shadow: #000000;
-      --color-secondary: #fafafa;
+      --color-secondary: #e7f0ea;
       --color-secondary-foreground: #27272a;
       --color-secondary-border: #ceded4;
       --color-switch-active-track: #1c694f;
       --color-switch-active-thumb: #f6fffa;
-      --color-switch-inactive-track: #fafafa;
+      --color-switch-inactive-track: #e7f0ea;
       --color-switch-inactive-thumb: #456257;
       --color-warning: #fcf4e8;
       --color-warning-border: rgba(254, 154, 0, 0.32);
@@ -388,9 +388,9 @@
       --color-header: rgba(237, 245, 240, 0.97);
       --color-header-foreground: #27272a;
       --color-header-border: #ceded4;
-      --color-glass-surface: rgba(255, 255, 255, 0.74);
+      --color-glass-surface: rgba(251, 253, 251, 0.74);
       --color-glass-fallback: rgba(231, 240, 234, 0.94);
-      --color-glass-tint: rgba(255, 255, 255, 0.22);
+      --color-glass-tint: rgba(251, 253, 251, 0.22);
       --color-status-bar: #f3f8f5;
       --color-md-body: #132c23;
       --color-md-strong: #132c23;

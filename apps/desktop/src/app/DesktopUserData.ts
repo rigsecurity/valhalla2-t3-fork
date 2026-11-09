@@ -36,7 +36,9 @@ export const resolveUserDataPath = Effect.fn("desktop.userData.resolveUserDataPa
     readonly appDataDirectory: string;
     readonly isDevelopment: boolean;
     readonly platform: NodeJS.Platform;
+    readonly chromiumProfileDirectory?: string;
   }) {
+    if (input.chromiumProfileDirectory !== undefined) return input.chromiumProfileDirectory;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const names = input.isDevelopment

@@ -68,8 +68,10 @@ describe("DesktopEnvironment", () => {
       );
       const production = yield* makeEnvironment();
 
-      assert.equal(development.stateDir, "/Users/alice/.t3/dev");
-      assert.equal(production.stateDir, "/Users/alice/.t3/userdata");
+      assert.equal(development.stateDir, "/Users/alice/.valhalla2/dev");
+      assert.equal(development.chromiumProfileDirectory, "/Users/alice/.valhalla2/desktop-dev");
+      assert.equal(production.stateDir, "/Users/alice/.valhalla2/userdata");
+      assert.equal(production.chromiumProfileDirectory, "/Users/alice/.valhalla2/desktop");
     }),
   );
 });
