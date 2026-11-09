@@ -4,6 +4,9 @@ The Apple Silicon pilot uses the T3 desktop packager. Valhalla2 keeps its settin
 browser profile under `~/.valhalla2`. It registers its own `valhalla2://` links. Preview builds
 receive updates by installing a new pilot build.
 
+Product usage data and T3 Connect relay tracing are opt-in. Results metrics stay on the Valhalla2
+environment and are available independently of [product usage data](../user/telemetry.md).
+
 Follow [T3 development setup](development.md) for Vite+, Node and the macOS build prerequisites.
 Use Rust 1.95 or newer for the bundled resource monitor. From the fork checkout, run:
 
