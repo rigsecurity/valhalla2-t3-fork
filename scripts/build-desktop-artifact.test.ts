@@ -1386,6 +1386,9 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   );
 
   it("derives macOS passkey signing configuration from the Clerk publishable key", () => {
+    assert.isUndefined(
+      resolveMacPasskeySigningConfiguration({ T3CODE_APPLE_TEAM_ID: "ABC1234567" }),
+    );
     const configuration = resolveMacPasskeySigningConfiguration({
       T3CODE_APPLE_TEAM_ID: "abc1234567",
       T3CODE_MACOS_PROVISIONING_PROFILE: "/tmp/t3code.provisionprofile",
@@ -1407,6 +1410,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       T3CODE_CLERK_PASSKEY_RP_DOMAINS:
         " Clerk.Example.com,example.clerk.accounts.dev,clerk.example.com ",
     });
+    assert.ok(configuration);
     const entitlements = renderMacPasskeyEntitlements(configuration, {
       touchIdKeychainAccessGroup: undefined,
       browserPasskeys: false,
