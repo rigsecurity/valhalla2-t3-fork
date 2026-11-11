@@ -82,11 +82,10 @@ function useConnectedThreadSearch(query: string) {
           }),
         )
       : undefined;
-  return useThreadSearch(
-    environmentIds,
-    query,
-    environmentLabels === undefined ? {} : { environmentLabels },
-  );
+  return useThreadSearch(environmentIds, query, {
+    includeArchived: true,
+    ...(environmentLabels === undefined ? {} : { environmentLabels }),
+  });
 }
 
 /**
@@ -111,6 +110,7 @@ export function useCommandPaletteThreadItems(input: {
   const { environments } = useEnvironments();
   const threadItems = buildThreadActionItems({
     threads,
+    includeArchived: threadSearchQuery.trim().length > 0,
     ...(environments.length > 1
       ? {
           environmentLabelOf: (thread: (typeof threads)[number]) =>
@@ -123,6 +123,9 @@ export function useCommandPaletteThreadItems(input: {
     renderLeadingContent: (thread) => <ThreadRowLeadingStatus thread={thread} />,
     renderTrailingContent: (thread) => (
       <>
+        {thread.archivedAt !== null ? (
+          <span className="text-xs text-muted-foreground">Archived</span>
+        ) : null}
         <ThreadSearchPullRequestNumber
           thread={thread}
           query={threadSearchQuery}
@@ -214,7 +217,7 @@ export function useCommandPaletteThreadItems(input: {
         threadContentMatch: {
           source: match.source,
           snippet: match.snippet,
-          query: messageSearch.query,
+          query: match.matchedQuery ?? messageSearch.query,
         },
         // Opens the thread with find on the word at the matched message, so it is in view.
         run: async () => {

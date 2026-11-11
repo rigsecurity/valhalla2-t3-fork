@@ -217,13 +217,21 @@ The linked pull request participates in automatic settlement.
 
 ## Find and reference work
 
-On web and desktop, open the command palette with `Cmd/Ctrl+K` to search threads
-across connected environments by title, branch, pull request, or project.
+Open **Search everything** with `Cmd+Option+F` on Mac or `Ctrl+Alt+F` on Windows
+and Linux. `Cmd/Ctrl+K` opens the same palette. Search chats across all projects
+and connected environments, including archived threads, by title, branch,
+pull request link or number, project, or message text. Links in messages are
+searchable even when displayed with a different label. Source files keep their
+separate `Cmd/Ctrl+Shift+F` search.
 Threads you open often or recently rank higher, and for three weeks the thread
 you last picked for a query ranks higher when you type that query again.
 Threads whose messages contain all your words appear below, under **In
 messages**, and open at the matching message. Message search needs at least
 one word of three or more letters, or two for Chinese, Japanese, and Korean.
+Exact matches come first; near matches can recover a single misspelled word.
+Common queries show a limited set of results; add another word or paste the
+full PR link to narrow them. Archived results are marked **Archived** and open
+without unarchiving. Update connected servers to enable archived and fuzzy search.
 On mobile, the thread list search also lists message matches and opens them at
 the matching message; on an iPad with a keyboard, `Cmd+K` opens the same
 palette.

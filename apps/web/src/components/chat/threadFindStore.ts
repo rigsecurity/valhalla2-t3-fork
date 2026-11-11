@@ -173,9 +173,10 @@ export function useThreadFindOpen(thread: ScopedThreadRef | null, enabled: boole
  * snippet writes it ("Café" for "cafe", since find matches accents).
  */
 export function findForMessageMatch(
-  match: Pick<OrchestrationThreadSearchMatch, "snippet" | "messageId">,
+  match: Pick<OrchestrationThreadSearchMatch, "snippet" | "messageId" | "matchedQuery">,
   query: string,
 ): PendingThreadFind {
+  query = match.matchedQuery ?? query;
   const start = match.messageId ? { start: { entryId: match.messageId, occurrence: 0 } } : {};
   // Apostrophes are straight in the query; straightening keeps offsets.
   const together = messagePhrase(query)?.exec(match.snippet.replace(/[\u2018\u2019]/g, "'"));

@@ -93,6 +93,7 @@ export function installCommandPaletteCommands(
         void router.navigate({ to: "/usage" });
       },
       "commandPalette.toggle": toggleOverlay("commandPalette.toggle"),
+      "globalSearch.toggle": toggleOverlay("globalSearch.toggle"),
       "filePicker.toggle": toggleOverlay("filePicker.toggle"),
       "projectSearch.toggle": toggleOverlay("projectSearch.toggle"),
     },

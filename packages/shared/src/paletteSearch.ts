@@ -651,6 +651,65 @@ export function messageMatcher(query: string): (text: string) => MessageMatch | 
   };
 }
 
+export function fuzzySearchSeeds(token: string, includeFragments = true): ReadonlyArray<string> {
+  if (!/^\p{L}{4,32}$/u.test(token)) return [token];
+  const characters = Array.from(token);
+  const seeds = new Set([token]);
+  for (let index = 0; index < characters.length - 1; index++) {
+    const swapped = [...characters];
+    [swapped[index], swapped[index + 1]] = [swapped[index + 1]!, swapped[index]!];
+    seeds.add(swapped.join(""));
+  }
+  if (includeFragments) {
+    const split = Math.floor(characters.length / 2);
+    seeds.add(characters.slice(0, Math.max(3, split)).join(""));
+    seeds.add(characters.slice(Math.min(split, characters.length - 3)).join(""));
+  }
+  return [...seeds];
+}
+
+export function fuzzyMessageMatcher(
+  query: string,
+): (text: string) => (MessageMatch & { readonly matchedQuery?: string }) | null {
+  const exact = messageMatcher(query);
+  const { words } = messageSearchTokens(query);
+  const tokens = words.map((word) => ({ word, match: messageMatcher(word) }));
+  return (text) => {
+    const found = exact(text);
+    if (found !== null || tokens.length > 8) return found;
+    let corrected = false;
+    const queryWords: string[] = [];
+    let offset = Number.POSITIVE_INFINITY;
+    for (const { word, match } of tokens) {
+      const part = match(text);
+      if (part !== null) {
+        queryWords.push(word);
+        offset = Math.min(offset, part.offset);
+        continue;
+      }
+      if (corrected || !/^\p{L}{4,32}$/u.test(word)) return null;
+      const folded = foldInPlace(word);
+      let candidate: RegExpExecArray | undefined;
+      for (const foundWord of text.matchAll(/\p{L}+/gu)) {
+        if (
+          Math.abs(foundWord[0].length - word.length) <= 1 &&
+          withinOneEdit(folded, foldInPlace(foundWord[0]), false)
+        ) {
+          candidate = foundWord;
+          break;
+        }
+      }
+      if (candidate === undefined) return null;
+      queryWords.push(candidate[0]);
+      offset = Math.min(offset, candidate.index);
+      corrected = true;
+    }
+    return corrected
+      ? { quality: 0.2, offset, matchedQuery: queryWords.join(" ").slice(0, 200) }
+      : null;
+  };
+}
+
 // The shortest stretch of text holding one place of each word, from each
 // word's places in order.
 function shortestSpan(places: ReadonlyArray<ReadonlyArray<number>>): {

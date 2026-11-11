@@ -72,6 +72,43 @@ it("ignores invalid search keys", () => {
   }
 });
 
+it("requests archived search only from capable environments, including short title queries", () => {
+  const requests: Array<{
+    environmentId: EnvironmentId;
+    input: OrchestrationV2SearchThreadsInput;
+  }> = [];
+  const search = createThreadSearchResultsAtomFamily({
+    getSearchAtom: (environmentId, input) => {
+      requests.push({ environmentId, input });
+      return Atom.make(AsyncResult.success({ matches: [] }));
+    },
+    globalSearchSupported: Atom.family((id: EnvironmentId) => Atom.make(id === envA)),
+    labelPrefix: "test:global-search",
+  });
+  const registry = AtomRegistry.make();
+  try {
+    registry.get(
+      search.results(makeThreadSearchKey([envA, envB], "pr", { includeArchived: true })),
+    );
+    expect(requests).toEqual([
+      {
+        environmentId: envA,
+        input: { query: "pr", includeArchived: true, fuzzy: true, titlesOnly: true },
+      },
+    ]);
+    requests.length = 0;
+    registry.get(
+      search.results(makeThreadSearchKey([envA, envB], "needle", { includeArchived: true })),
+    );
+    expect(requests).toEqual([
+      { environmentId: envA, input: { query: "needle", includeArchived: true, fuzzy: true } },
+      { environmentId: envB, input: { query: "needle" } },
+    ]);
+  } finally {
+    registry.dispose();
+  }
+});
+
 it("merges successful environments and silently ignores failures", () => {
   const result: OrchestrationSearchThreadsResult = {
     matches: [

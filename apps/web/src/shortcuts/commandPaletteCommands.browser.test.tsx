@@ -9,6 +9,7 @@ import { installCommandPaletteCommands } from "./commandPaletteCommands";
 
 const keybindings = compileResolvedKeybindingsConfig([
   { key: "mod+k", command: "commandPalette.toggle" },
+  { key: "mod+alt+f", command: "globalSearch.toggle" },
 ]);
 
 function MountedPalette() {
@@ -45,6 +46,11 @@ describe("command palette shortcuts", () => {
     );
 
     await userEvent.keyboard("{Control>}k{/Control}");
+    expect(useCommandPaletteStore.getState().open).toBe(true);
+
+    await userEvent.keyboard("{Control>}{Alt>}f{/Alt}{/Control}");
+    expect(useCommandPaletteStore.getState().open).toBe(false);
+    await userEvent.keyboard("{Control>}{Alt>}f{/Alt}{/Control}");
     expect(useCommandPaletteStore.getState().open).toBe(true);
 
     await screen.rerender(<div />);

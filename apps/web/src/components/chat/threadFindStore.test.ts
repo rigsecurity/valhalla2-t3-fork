@@ -91,6 +91,19 @@ describe("findForMessageMatch", () => {
     expect(findForMessageMatch({ snippet: "fix the sidebar lag" }, "fix sidebar")).toEqual({
       query: "sidebar",
     });
+    expect(
+      findForMessageMatch(
+        {
+          snippet: "performance checklist",
+          matchedQuery: "performance",
+          messageId: MessageId.make("message-2"),
+        },
+        "perforamnce",
+      ),
+    ).toEqual({
+      query: "performance",
+      start: { entryId: "message-2", occurrence: 0 },
+    });
     // The whole query, when the snippet holds it as typed.
     expect(findForMessageMatch({ snippet: "then Vp  run dev again" }, "vp run dev")).toEqual({
       query: "Vp  run dev",

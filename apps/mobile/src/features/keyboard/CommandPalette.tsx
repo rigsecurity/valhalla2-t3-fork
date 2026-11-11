@@ -262,11 +262,10 @@ export function CommandPalette(props: {
           }),
         )
       : undefined;
-  const search = useThreadSearch(
-    searchEnvironmentIds,
-    query.startsWith(">") ? "" : query,
-    environmentLabels === undefined ? {} : { environmentLabels },
-  );
+  const search = useThreadSearch(searchEnvironmentIds, query.startsWith(">") ? "" : query, {
+    includeArchived: true,
+    ...(environmentLabels === undefined ? {} : { environmentLabels }),
+  });
   const serverConfigs = useServerConfigs();
   const startTriage = useStartTriage();
   const newTaskFlow = useNewTaskFlow();
@@ -426,7 +425,11 @@ export function CommandPalette(props: {
         }),
     }));
     const threadItems: CommandPaletteItem[] = threads
-      .filter((thread) => thread.archivedAt === null && isListedThreadLineage(thread.lineage))
+      .filter(
+        (thread) =>
+          (query.trim().length > 0 || thread.archivedAt === null) &&
+          isListedThreadLineage(thread.lineage),
+      )
       .map((thread) => {
         const project = projectByKey.get(scopedProjectKey(thread.environmentId, thread.projectId));
         const environment =
@@ -435,7 +438,9 @@ export function CommandPalette(props: {
           key: scopedThreadKey(thread.environmentId, thread.id),
           kind: "thread",
           title: thread.title || "Untitled thread",
-          detail: [project?.title, environment].filter(Boolean).join(" · "),
+          detail: [project?.title, environment, thread.archivedAt === null ? null : "Archived"]
+            .filter(Boolean)
+            .join(" · "),
           searchTerms: [],
           threadSearch: threadSearchSubject(
             thread,
@@ -468,6 +473,7 @@ export function CommandPalette(props: {
     canTriage,
     navigation,
     projects,
+    query,
     runCommand,
     savedConnectionsById,
     selectDetail,
@@ -639,8 +645,8 @@ export function CommandPalette(props: {
                   />
                   <TextInput
                     ref={inputRef}
-                    accessibilityLabel="Search commands, projects, and threads"
-                    placeholder="Search commands, projects, and threads…"
+                    accessibilityLabel="Search everything"
+                    placeholder="Search chats, PRs, branches, projects…"
                     placeholderTextColorClassName="accent-placeholder"
                     autoCorrect={false}
                     autoCapitalize="none"

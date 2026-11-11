@@ -41,9 +41,35 @@ describe("CommandPalette open intents", () => {
 
     openCommandPalette({ query: "acme" });
 
-    const input = page.getByPlaceholder("Search commands, projects, and threads...");
+    const input = page.getByPlaceholder("Search everything: chats, PRs, branches, projects…");
     await expect.element(input).toHaveFocus();
     await expect.element(input).toHaveValue("acme");
+  });
+
+  it("opens an archived search result while keeping it out of recents", async () => {
+    const archived = makeThreadFixture({
+      id: ThreadId.make("archived-search"),
+      environmentId: EnvironmentId.make("local"),
+      title: "Authentication rollout",
+      archivedAt: "2026-03-02T00:00:00.000Z",
+    });
+    setup({ threads: [archived] });
+    await using screen = await render(<CommandPalette>{null}</CommandPalette>);
+    openCommandPalette();
+    await expect
+      .element(page.getByPlaceholder("Search everything: chats, PRs, branches, projects…"))
+      .toHaveFocus();
+    await expect
+      .element(page.getByRole("option", { name: /Authentication rollout/ }))
+      .not.toBeInTheDocument();
+    await page
+      .getByPlaceholder("Search everything: chats, PRs, branches, projects…")
+      .fill("authentication");
+    const result = page.getByRole("option", { name: /Authentication rollout/ });
+    await result.click();
+    await vi.waitFor(() =>
+      expect(screen.router?.state.location.pathname).toBe("/local/archived-search"),
+    );
   });
 
   it("opens a searched project's latest listed thread, not a newer subagent", async () => {

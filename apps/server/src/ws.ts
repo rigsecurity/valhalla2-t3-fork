@@ -1927,6 +1927,7 @@ export const layerWsRpc = (
           shellResumeCompletionMarker: true,
           shellThreadFamilies: true,
           shellOlderSettled: true,
+          globalThreadSearch: true,
           threadResumeCompletionMarker: true,
           threadSnapshotPagination: true,
           threadFind: true,
@@ -2104,9 +2105,13 @@ export const layerWsRpc = (
             request: input,
             search: threadSearch.search,
             searchOlderSettled: threadSearch.searchOlderSettled,
+            searchAll: threadSearch.searchAll,
             sql,
             readThreads: (threadIds) =>
-              threadManagement.readShellSnapshot({ location: "active", threadIds }),
+              threadManagement.readShellSnapshot({
+                ...(input.includeArchived ? {} : { location: "active" as const }),
+                threadIds,
+              }),
             latestSequence: applicationEvents.latestApplicationSequence,
           }).pipe(
             Effect.mapError(

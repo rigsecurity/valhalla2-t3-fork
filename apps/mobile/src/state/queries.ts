@@ -39,6 +39,7 @@ import { olderSettledThreads, threadFamilies } from "./threads";
 import { projectEnvironment } from "./projects";
 import { useEnvironmentQuery } from "./query";
 import { vcsEnvironment } from "./vcs";
+import { serverEnvironment } from "./server";
 import { composerPullRequests } from "./pull-requests";
 import {
   buildCheckpointDiffTargets,
@@ -78,6 +79,11 @@ const threadSearch = createThreadSearchResultsAtomFamily({
       ? orchestrationEnvironment.threadSearch({ environmentId, input })
       : olderSettledThreads.searchAtom(environmentId, input),
   olderSettledBefore: olderSettledBeforeAtom,
+  globalSearchSupported: Atom.family((environmentId: EnvironmentId) =>
+    Atom.make(
+      (get) => get(serverEnvironment.configValueAtom(environmentId))?.globalThreadSearch === true,
+    ),
+  ),
   labelPrefix: "mobile:thread-search",
 });
 
@@ -218,7 +224,7 @@ export function useThreadSearch(
   const canSearch =
     environmentIds.length > 0 &&
     ((scope.titlesOnly !== true && messageSearchTokens(normalizedQuery).long.length > 0) ||
-      (anyOlderSettled && normalizedQuery.length >= 2));
+      ((anyOlderSettled || scope.includeArchived === true) && normalizedQuery.length >= 2));
   const settledQuery = canSearch && normalizedQuery === debouncedQuery ? debouncedQuery : null;
   const searchKeyOf = (searchQuery: string) =>
     makeThreadSearchKey(environmentIds, searchQuery, scope);

@@ -29,6 +29,9 @@ import {
   rankMessageMatches,
   rankSearchItems,
   messageMatcher,
+  fuzzyMessageMatcher,
+  fuzzySearchSeeds,
+  scoreSearchTerms,
   scoreThreadSearch,
   type ThreadSearchSubject,
 } from "@t3tools/shared/paletteSearch";
@@ -62,6 +65,8 @@ export class ThreadSearchError extends Schema.TaggedError<ThreadSearchError>()(
 
 // Token lists bind as JSON arrays, so any number of them is one parameter.
 const TokenList = Schema.fromJsonString(Schema.Array(Schema.String));
+type ThreadSearchInput = OrchestrationSearchThreadsInput &
+  Pick<OrchestrationV2SearchThreadsInput, "includeArchived" | "fuzzy">;
 const SearchRequest = Schema.Struct({
   /** The FTS5 query, or null to scan messages instead. */
   match: Schema.NullOr(Schema.String),
@@ -70,6 +75,10 @@ const SearchRequest = Schema.Struct({
   projectId: Schema.NullOr(ProjectId),
   /** Threads the caller already lists, left out before the hit limit. */
   excludedThreadIds: TokenList,
+  includeArchived: Schema.optionalKey(Schema.Boolean),
+  candidateLimit: Schema.optionalKey(Schema.Int),
+  hitLimit: Schema.optionalKey(Schema.Int),
+  textLimit: Schema.optionalKey(Schema.Int),
 });
 const SearchRow = Schema.Struct({
   messageRowid: Schema.Number,
@@ -109,7 +118,7 @@ const MESSAGE_SCAN_LIMIT = 20_000;
 function buildMessageSearch(
   query: string,
   hasIndex: boolean,
-): Omit<typeof SearchRequest.Type, "projectId" | "excludedThreadIds"> | null {
+): Pick<typeof SearchRequest.Type, "match" | "substrings"> | null {
   const { long, short } = messageSearchTokens(query);
   if (long.length === 0) return null;
   // Two-character CJK words are too short for trigrams.
@@ -120,9 +129,23 @@ function buildMessageSearch(
   };
 }
 
-// A thread shows a link as its text, so in-thread find cannot reach a match
-// in the address; messages are matched as they read.
-const MARKDOWN_LINK = /!?\[([^\]\n]*)\]\([^)\s]*\)/g;
+const MARKDOWN_LINK = /!?\[([^\]\n]*)\]\(([^)\s]*)\)/g;
+const quoteSearchToken = (token: string) => `"${token.replaceAll('"', '""')}"`;
+const fuzzyIndexTokens = (tokens: ReadonlyArray<string>, includeFragments = true) =>
+  tokens
+    .map(
+      (word) => `(${fuzzySearchSeeds(word, includeFragments).map(quoteSearchToken).join(" OR ")})`,
+    )
+    .join(" AND ");
+const fuzzyIndexQuery = (query: string, includeFragments: boolean) => {
+  const { long } = messageSearchTokens(query);
+  if (long.length === 0 || long.length > 8 || long.some((word) => Array.from(word).length < 3)) {
+    return null;
+  }
+  return long.some((word) => fuzzySearchSeeds(word, includeFragments).length > 1)
+    ? fuzzyIndexTokens(long, includeFragments)
+    : null;
+};
 
 // Result rows show one line, so the match must sit near the start to be seen.
 const SNIPPET_LEAD = 24;
@@ -160,15 +183,24 @@ export function buildSearchSnippet(text: string, matchStart: number): string {
 // The scan folds ASCII case only, so accent variants and non-ASCII case variants may not match.
 export const messageHitsQuery = (
   sql: SqlClient.SqlClient,
-  { match, substrings, projectId, excludedThreadIds }: typeof SearchRequest.Encoded,
+  {
+    match,
+    substrings,
+    projectId,
+    excludedThreadIds,
+    includeArchived = false,
+    candidateLimit = MESSAGE_CANDIDATE_LIMIT,
+    hitLimit = MESSAGE_HIT_LIMIT,
+    textLimit,
+  }: typeof SearchRequest.Encoded,
 ) => sql`
-    WITH eligible AS MATERIALIZED (
+    WITH eligible AS (
       SELECT threads.thread_id, threads.project_id
       FROM orchestration_v2_projection_threads AS threads
       INNER JOIN projection_projects AS projects
         ON projects.project_id = threads.project_id
       WHERE threads.deleted_at IS NULL
-        AND threads.archived_at IS NULL
+        AND (${includeArchived ? 1 : 0} = 1 OR threads.archived_at IS NULL)
         AND projects.deleted_at IS NULL
         AND (${projectId} IS NULL OR threads.project_id = ${projectId})
         AND threads.thread_id NOT IN (SELECT value FROM json_each(${excludedThreadIds}))
@@ -185,7 +217,7 @@ export const messageHitsQuery = (
             messages.thread_id AS "threadId",
             eligible.project_id AS "projectId",
             messages.role AS source,
-            json_extract(messages.payload_json, '$.text') AS text,
+            ${textLimit === undefined ? sql`json_extract(messages.payload_json, '$.text')` : sql`substr(json_extract(messages.payload_json, '$.text'), 1, ${textLimit})`} AS text,
             messages.created_at AS "messageCreatedAt"
           FROM orchestration_v2_projection_messages AS messages
           INNER JOIN eligible ON eligible.thread_id = messages.thread_id
@@ -202,7 +234,7 @@ export const messageHitsQuery = (
             messages.thread_id AS "threadId",
             eligible.project_id AS "projectId",
             messages.role AS source,
-            json_extract(messages.payload_json, '$.text') AS text,
+            ${textLimit === undefined ? sql`json_extract(messages.payload_json, '$.text')` : sql`substr(json_extract(messages.payload_json, '$.text'), 1, ${textLimit})`} AS text,
             messages.created_at AS "messageCreatedAt"
           FROM orchestration_v2_message_search
           INNER JOIN orchestration_v2_projection_messages AS messages
@@ -213,7 +245,7 @@ export const messageHitsQuery = (
               SELECT orchestration_v2_message_search.rowid FROM orchestration_v2_message_search
               WHERE orchestration_v2_message_search MATCH ${match}
               ORDER BY orchestration_v2_message_search.rowid DESC
-              LIMIT 1 OFFSET ${MESSAGE_CANDIDATE_LIMIT - 1}
+              LIMIT 1 OFFSET ${candidateLimit - 1}
             ), 0)
             AND ${nonPlaceholderMessageCondition(sql)}
         `
@@ -228,7 +260,7 @@ export const messageHitsQuery = (
     -- The index's own rowid, so FTS5 returns hits newest first and stops at
     -- the limit; ordering by the messages table's rowid sorts every hit.
     ORDER BY "messageRowid" DESC
-    LIMIT ${MESSAGE_HIT_LIMIT}
+    LIMIT ${hitLimit}
   `;
 
 const TitleCandidateRow = Schema.Struct({
@@ -251,14 +283,14 @@ export class ThreadSearch extends Context.Service<
   {
     /** Message text matches, for clients that rank their own thread list. */
     readonly search: (
-      input: OrchestrationSearchThreadsInput,
+      input: ThreadSearchInput,
     ) => Effect.Effect<OrchestrationSearchThreadsResult, ThreadSearchError>;
     /**
      * Title, branch, pull request, and project matches ranked as the command
      * palette ranks them, then message matches for the remaining threads.
      */
     readonly searchThreads: (
-      input: OrchestrationSearchThreadsInput & { readonly projectId?: ProjectId | undefined },
+      input: ThreadSearchInput & { readonly projectId?: ProjectId | undefined },
     ) => Effect.Effect<{ readonly matches: ReadonlyArray<ThreadSearchHit> }, ThreadSearchError>;
     /**
      * The settled threads before `before` that clients omitting older settled threads should
@@ -273,6 +305,12 @@ export class ThreadSearch extends Context.Service<
       readonly environmentLabel?: string | undefined;
       readonly messageThreadIds: ReadonlyArray<ThreadId>;
     }) => Effect.Effect<ReadonlyArray<ThreadId>, ThreadSearchError>;
+    readonly searchAll: (input: {
+      readonly query: string;
+      readonly projectIds?: ReadonlyArray<ProjectId> | undefined;
+      readonly environmentLabel?: string | undefined;
+      readonly messageThreadIds: ReadonlyArray<ThreadId>;
+    }) => Effect.Effect<ReadonlyArray<ThreadId>, ThreadSearchError>;
   }
 >()("t3/orchestration-v2/ThreadSearch") {}
 
@@ -281,7 +319,7 @@ const OLDER_SETTLED_TITLE_ROWS = 15;
 const OLDER_SETTLED_MESSAGE_ROWS = 5;
 
 // Only the fields the palette scorer reads, so an interactive search does not decode payloads.
-const OlderSettledTitleRow = Schema.Struct({
+const MetadataCandidateRow = Schema.Struct({
   id: ThreadId,
   title: Schema.String,
   branch: Schema.NullOr(Schema.String),
@@ -318,9 +356,12 @@ export const make = Effect.gen(function* () {
   });
 
   const titleCandidates = SqlSchema.findAll({
-    Request: Schema.Struct({ projectId: Schema.NullOr(ProjectId) }),
+    Request: Schema.Struct({
+      projectId: Schema.NullOr(ProjectId),
+      includeArchived: Schema.Boolean,
+    }),
     Result: TitleCandidateRow,
-    execute: ({ projectId }) => sql`
+    execute: ({ projectId, includeArchived }) => sql`
       SELECT
         threads.payload_json AS thread,
         projects.title AS "projectTitle",
@@ -329,7 +370,7 @@ export const make = Effect.gen(function* () {
       INNER JOIN projection_projects AS projects
         ON projects.project_id = threads.project_id
       WHERE threads.deleted_at IS NULL
-        AND threads.archived_at IS NULL
+        AND (${includeArchived ? 1 : 0} = 1 OR threads.archived_at IS NULL)
         AND projects.deleted_at IS NULL
         AND json_extract(threads.payload_json, '$.lineage.relationshipToParent')
           IS NOT 'subagent'
@@ -338,13 +379,15 @@ export const make = Effect.gen(function* () {
     `,
   });
 
-  const olderSettledTitleCandidates = SqlSchema.findAll({
+  const metadataCandidates = SqlSchema.findAll({
     Request: Schema.Struct({
-      before: Schema.String,
+      before: Schema.NullOr(Schema.String),
       projectIds: Schema.NullOr(TokenList),
+      threadIds: Schema.optionalKey(TokenList),
+      includeArchived: Schema.optionalKey(Schema.Boolean),
     }),
-    Result: OlderSettledTitleRow,
-    execute: ({ before, projectIds }) => sql`
+    Result: MetadataCandidateRow,
+    execute: ({ before, projectIds, threadIds, includeArchived = false }) => sql`
       SELECT
         threads.thread_id AS id,
         json_extract(threads.payload_json, '$.title') AS title,
@@ -360,15 +403,22 @@ export const make = Effect.gen(function* () {
       INNER JOIN projection_projects AS projects
         ON projects.project_id = threads.project_id
       WHERE threads.deleted_at IS NULL
-        AND json_extract(threads.payload_json, '$.archivedAt') IS NULL
+        AND (${includeArchived ? 1 : 0} = 1 OR threads.archived_at IS NULL)
         AND projects.deleted_at IS NULL
         AND json_extract(threads.payload_json, '$.lineage.relationshipToParent')
           IS NOT 'subagent'
         AND json_extract(threads.payload_json, '$.lineage.sideChat') IS NOT 1
-        AND json_extract(threads.payload_json, '$.settledOverride') = 'settled'
-        AND json_extract(threads.payload_json, '$.settledAt') < ${before}
+        ${
+          before === null
+            ? sql``
+            : sql`
+          AND json_extract(threads.payload_json, '$.settledOverride') = 'settled'
+          AND json_extract(threads.payload_json, '$.settledAt') < ${before}
+        `
+        }
         AND (${projectIds} IS NULL
           OR threads.project_id IN (SELECT value FROM json_each(${projectIds})))
+        ${threadIds === undefined ? sql`` : sql`AND threads.thread_id IN (SELECT value FROM json_each(${threadIds}))`}
     `,
   });
 
@@ -410,7 +460,7 @@ export const make = Effect.gen(function* () {
   // A project scope applies before ranking, so other projects' stronger hits
   // cannot use up the limit.
   const searchMessages = Effect.fn("ThreadSearch.search")(function* (
-    input: OrchestrationSearchThreadsInput & {
+    input: ThreadSearchInput & {
       readonly projectId: ProjectId | null;
       /** Threads the caller already lists, which must not use up the limit. */
       readonly excludedThreadIds?: ReadonlySet<ThreadId>;
@@ -428,6 +478,7 @@ export const make = Effect.gen(function* () {
       readonly text: string;
       readonly quality: number;
       readonly offset: number;
+      readonly matchedQuery?: string;
     };
     const newer = (left: Hit, right: Hit) =>
       (right.row.messageCreatedAt ?? "").localeCompare(left.row.messageCreatedAt ?? "");
@@ -435,19 +486,24 @@ export const make = Effect.gen(function* () {
       right.quality - left.quality ||
       Number(left.row.source !== "user") - Number(right.row.source !== "user") ||
       newer(left, right);
-    const rows = yield* read(
+    const { rows, hasIndex } = yield* read(
       Effect.gen(function* () {
         const index = yield* sql`
           SELECT 1 FROM sqlite_master WHERE name = 'orchestration_v2_message_search'
         `;
         const messageSearch = buildMessageSearch(input.query, index.length > 0);
-        return messageSearch === null
-          ? []
-          : yield* searchRows({
-              ...messageSearch,
-              projectId: input.projectId,
-              excludedThreadIds: [...(input.excludedThreadIds ?? [])],
-            });
+        return {
+          hasIndex: index.length > 0,
+          rows:
+            messageSearch === null
+              ? []
+              : yield* searchRows({
+                  ...messageSearch,
+                  projectId: input.projectId,
+                  includeArchived: input.includeArchived ?? false,
+                  excludedThreadIds: [...(input.excludedThreadIds ?? [])],
+                }),
+        };
       }),
     );
     const best = new Map<ThreadId, Hit>();
@@ -456,19 +512,51 @@ export const make = Effect.gen(function* () {
     // for "rust") never add to a whole word's count.
     const hitCounts = new Map<ThreadId, number>();
     const hitCount = (threadId: ThreadId) => hitCounts.get(threadId) ?? 1;
-    const matchMessage = messageMatcher(input.query);
-    for (const row of rows) {
-      const text = row.text.replace(MARKDOWN_LINK, "$1");
-      const match = matchMessage(text);
-      if (match === null) continue;
-      const hit = { row, text, ...match };
-      const current = best.get(row.threadId);
-      if (current === undefined || hit.quality > current.quality) {
-        hitCounts.set(row.threadId, 1);
-      } else if (hit.quality === current.quality) {
-        hitCounts.set(row.threadId, hitCount(row.threadId) + 1);
+    const addRows = (rows: ReadonlyArray<typeof SearchRow.Type>, fuzzy: boolean) => {
+      const matchMessage = fuzzy ? fuzzyMessageMatcher(input.query) : messageMatcher(input.query);
+      for (const row of rows) {
+        let text = row.text.replace(MARKDOWN_LINK, "$1");
+        let match = matchMessage(text);
+        let linkLabel: string | undefined;
+        if (match === null) {
+          text = row.text.replace(MARKDOWN_LINK, "$1 ($2)");
+          match = matchMessage(text);
+          if (match !== null) {
+            linkLabel = Array.from(row.text.matchAll(MARKDOWN_LINK))
+              .find((link) => matchMessage(link[2]!) !== null)?.[1]
+              ?.trim()
+              .slice(0, 200);
+          }
+        }
+        if (match === null) continue;
+        const hit: Hit = { row, text, ...match, ...(linkLabel ? { matchedQuery: linkLabel } : {}) };
+        const current = best.get(row.threadId);
+        if (current === undefined || hit.quality > current.quality) {
+          hitCounts.set(row.threadId, 1);
+        } else if (hit.quality === current.quality) {
+          hitCounts.set(row.threadId, hitCount(row.threadId) + 1);
+        }
+        if (current === undefined || compareHits(hit, current) < 0) best.set(row.threadId, hit);
       }
-      if (current === undefined || compareHits(hit, current) < 0) best.set(row.threadId, hit);
+    };
+    addRows(rows, false);
+    for (const includeFragments of [false, true]) {
+      if (input.fuzzy !== true || !hasIndex || best.size >= 10) break;
+      const fuzzyQuery = fuzzyIndexQuery(input.query, includeFragments);
+      if (fuzzyQuery === null) continue;
+      const candidates = yield* read(
+        searchRows({
+          match: fuzzyQuery,
+          substrings: messageSearchTokens(input.query).short,
+          projectId: input.projectId,
+          excludedThreadIds: [...(input.excludedThreadIds ?? []), ...best.keys()],
+          includeArchived: input.includeArchived ?? false,
+          candidateLimit: 1024,
+          hitLimit: 128,
+          textLimit: 16384,
+        }),
+      );
+      addRows(candidates, true);
     }
     // Ranked as clients rank them, with picks and use, before the limit cuts:
     // a thread picked for this query must come back even when it only
@@ -497,16 +585,19 @@ export const make = Effect.gen(function* () {
       { picks: input.picks ?? true },
     );
     return {
-      matches: ranked.slice(0, input.limit ?? 50).map(({ row, text, quality, offset }) => ({
-        hits: hitCount(row.threadId),
-        threadId: row.threadId,
-        messageId: row.messageId,
-        projectId: row.projectId,
-        source: row.source,
-        snippet: buildSearchSnippet(text, offset),
-        messageCreatedAt: row.messageCreatedAt,
-        quality,
-      })),
+      matches: ranked
+        .slice(0, input.limit ?? 50)
+        .map(({ row, text, quality, offset, matchedQuery }) => ({
+          hits: hitCount(row.threadId),
+          threadId: row.threadId,
+          messageId: row.messageId,
+          projectId: row.projectId,
+          source: row.source,
+          snippet: buildSearchSnippet(text, offset),
+          messageCreatedAt: row.messageCreatedAt,
+          quality,
+          ...(matchedQuery === undefined ? {} : { matchedQuery }),
+        })),
     };
   });
 
@@ -521,7 +612,12 @@ export const make = Effect.gen(function* () {
     const now = DateTime.toEpochMillis(yield* DateTime.now);
     // Agents call this rarely, and a project has hundreds of threads, not
     // millions, so ranking every active thread in memory stays cheap.
-    const candidates = yield* read(titleCandidates({ projectId: input.projectId ?? null }));
+    const candidates = yield* read(
+      titleCandidates({
+        projectId: input.projectId ?? null,
+        includeArchived: input.includeArchived ?? false,
+      }),
+    );
     const subjectById = new Map(
       candidates.map((row): [ThreadId, ThreadSearchSubject] => [
         row.thread.id,
@@ -560,6 +656,8 @@ export const make = Effect.gen(function* () {
       projectId: input.projectId ?? null,
       excludedThreadIds: shown,
       picks: false,
+      includeArchived: input.includeArchived ?? false,
+      fuzzy: input.fuzzy ?? false,
     });
     const messageHits = matches
       .filter((match) => subjectById.has(match.threadId))
@@ -580,10 +678,8 @@ export const make = Effect.gen(function* () {
   )(function* ({ query, before, projectIds, environmentLabel, messageThreadIds }) {
     const normalizedQuery = foldSearchQuery(query);
     const now = DateTime.toEpochMillis(yield* DateTime.now);
-    const candidates = yield* read(
-      olderSettledTitleCandidates({ before, projectIds: projectIds ?? null }),
-    );
-    const subjectOf = (row: typeof OlderSettledTitleRow.Type): ThreadSearchSubject => ({
+    const candidates = yield* read(metadataCandidates({ before, projectIds: projectIds ?? null }));
+    const subjectOf = (row: typeof MetadataCandidateRow.Type): ThreadSearchSubject => ({
       id: row.id,
       title: row.title,
       branch: row.branch,
@@ -624,7 +720,122 @@ export const make = Effect.gen(function* () {
     ];
   });
 
-  return ThreadSearch.of({ search, searchThreads, searchOlderSettled });
+  const searchAll: ThreadSearch["Service"]["searchAll"] = Effect.fn("ThreadSearch.searchAll")(
+    function* ({ query, projectIds, environmentLabel, messageThreadIds }) {
+      const normalizedQuery = foldSearchQuery(query);
+      const now = DateTime.toEpochMillis(yield* DateTime.now);
+      const { long } = messageSearchTokens(query);
+      const prNumber = /(?:^|#|\/pull\/|\/merge_requests\/)(\d+)$/.exec(query.trim())?.[1];
+      const tokens = prNumber
+        ? [`pr${prNumber}`]
+        : long.filter((word) => Array.from(word).length >= 3).slice(0, 8);
+      const index = yield* read(sql`
+        SELECT 1 FROM sqlite_master WHERE name = 'orchestration_v2_thread_search'
+      `);
+      const indexedIds = (match: string | null, limit: number) =>
+        read(sql<{ id: string }>`
+        SELECT thread_id AS id FROM orchestration_v2_projection_threads
+        WHERE rowid IN (${
+          match === null || index.length === 0
+            ? sql`SELECT rowid FROM orchestration_v2_projection_threads ORDER BY rowid DESC LIMIT ${limit}`
+            : sql`SELECT rowid FROM orchestration_v2_thread_search
+                  WHERE orchestration_v2_thread_search MATCH ${match}
+                  ORDER BY rowid DESC LIMIT ${limit}`
+        })
+      `);
+      const ids = new Set<ThreadId>(
+        (yield* indexedIds(
+          tokens.length > 0 ? tokens.map(quoteSearchToken).join(" AND ") : null,
+          1000,
+        )).map((row) => ThreadId.make(row.id)),
+      );
+      const projects = yield* read(sql<{ id: string; title: string }>`
+        SELECT project_id AS id, title FROM projection_projects WHERE deleted_at IS NULL
+      `);
+      const contextTokens = tokens.filter(
+        (token) =>
+          scoreSearchTerms(foldSearchQuery(token), [
+            environmentLabel ?? "",
+            ...projects.map((project) => project.title),
+          ]) === null,
+      );
+      if (contextTokens.length > 0 && contextTokens.length < tokens.length) {
+        const rows = yield* indexedIds(contextTokens.map(quoteSearchToken).join(" AND "), 256);
+        for (const row of rows) ids.add(ThreadId.make(row.id));
+      }
+      const matchingProjects = projects
+        .filter(
+          (project) =>
+            scoreSearchTerms(normalizedQuery, [project.title, environmentLabel ?? ""]) !== null &&
+            (projectIds === undefined || projectIds.includes(ProjectId.make(project.id))),
+        )
+        .slice(0, 4);
+      for (const project of matchingProjects) {
+        const rows = yield* read(sql<{ id: string }>`
+          SELECT thread_id AS id FROM orchestration_v2_projection_threads
+          WHERE project_id = ${project.id} AND deleted_at IS NULL
+          ORDER BY updated_at DESC LIMIT 250
+        `);
+        for (const row of rows) ids.add(ThreadId.make(row.id));
+      }
+      const candidatesFor = (threadIds: ReadonlyArray<ThreadId>) =>
+        read(
+          metadataCandidates({
+            before: null,
+            projectIds: projectIds ?? null,
+            threadIds,
+            includeArchived: true,
+          }),
+        );
+      const rank = (rows: ReadonlyArray<typeof MetadataCandidateRow.Type>) =>
+        rankSearchItems(rows, (row, options) =>
+          scoreThreadSearch(
+            normalizedQuery,
+            {
+              id: row.id,
+              title: row.title,
+              branch: row.branch,
+              projectTitle: row.projectTitle,
+              environmentLabel: environmentLabel ?? null,
+              pullRequests: threadSearchPullRequests({
+                pullRequests: row.pullRequests ?? undefined,
+                linkedPullRequest: row.linkedPullRequest,
+                branchPullRequest: row.branchPullRequest,
+              }),
+              activityAt: Date.parse(row.latestUserMessageAt ?? row.createdAt),
+              opens: Option.getOrNull(decodeThreadOpens(row.opens)),
+            },
+            now,
+            options,
+          ),
+        );
+      const candidates = [...(yield* candidatesFor([...ids]))];
+      let ranked = rank(candidates);
+      const fuzzyTokens = contextTokens.length > 0 ? contextTokens : tokens;
+      for (const includeFragments of [false, true]) {
+        if (ranked.length >= 20 || index.length === 0) break;
+        if (!fuzzyTokens.some((token) => fuzzySearchSeeds(token, includeFragments).length > 1))
+          continue;
+        const fuzzy = fuzzyIndexTokens(fuzzyTokens, includeFragments);
+        const extra = (yield* indexedIds(fuzzy, 256))
+          .map((row) => ThreadId.make(row.id))
+          .filter((id) => !ids.has(id));
+        for (const id of extra) ids.add(id);
+        candidates.push(...(yield* candidatesFor(extra)));
+        ranked = rank(candidates);
+      }
+      const titleIds = ranked.slice(0, 20).map(({ item }) => item.id);
+      const titles = new Set(titleIds);
+      const messages = yield* candidatesFor(messageThreadIds.filter((id) => !titles.has(id)));
+      const eligibleMessages = new Set(messages.map((row) => row.id));
+      return [
+        ...titleIds,
+        ...messageThreadIds.filter((id) => eligibleMessages.has(id)).slice(0, 10),
+      ];
+    },
+  );
+
+  return ThreadSearch.of({ search, searchThreads, searchOlderSettled, searchAll });
 });
 
 export const layer = Layer.effect(ThreadSearch, make);
@@ -638,11 +849,12 @@ export const searchThreadsWithOlderSettledRows = Effect.fn(
 )(function* <E1, E2, E3, E4, E5>(input: {
   readonly request: OrchestrationV2SearchThreadsInput;
   readonly search: (
-    input: OrchestrationSearchThreadsInput,
+    input: ThreadSearchInput,
   ) => Effect.Effect<OrchestrationSearchThreadsResult, E1>;
   readonly searchOlderSettled: (
     input: Parameters<ThreadSearch["Service"]["searchOlderSettled"]>[0],
   ) => Effect.Effect<ReadonlyArray<ThreadId>, E2>;
+  readonly searchAll: ThreadSearch["Service"]["searchAll"];
   readonly sql: SqlClient.SqlClient;
   readonly readThreads: (
     threadIds: ReadonlyArray<ThreadId>,
@@ -653,19 +865,39 @@ export const searchThreadsWithOlderSettledRows = Effect.fn(
     input.request;
   const messages: OrchestrationV2SearchThreadsResult =
     titlesOnly === true ? { matches: [] } : yield* input.search(request);
-  if (olderSettledBefore === undefined) return messages;
+  if (olderSettledBefore === undefined && request.includeArchived !== true) return messages;
   // Ranked before the rows' transaction, so scoring never holds the shared reader.
-  const threadIds = yield* input.searchOlderSettled({
-    query: request.query,
-    before: olderSettledBefore,
-    projectIds,
-    environmentLabel,
-    messageThreadIds: messages.matches.map((match) => match.threadId),
-  });
+  const threadIds =
+    request.includeArchived === true
+      ? yield* input.searchAll({
+          query: request.query,
+          projectIds,
+          environmentLabel,
+          messageThreadIds: messages.matches.map((match) => match.threadId),
+        })
+      : yield* input.searchOlderSettled({
+          query: request.query,
+          before: olderSettledBefore!,
+          projectIds,
+          environmentLabel,
+          messageThreadIds: messages.matches.map((match) => match.threadId),
+        });
   const older = yield* loadOlderSettledThreadsPage({
     sql: input.sql,
     listThreads: Effect.succeed({ threadIds, counts: [] }),
-    readThreads: input.readThreads,
+    readThreads: (threadIds) =>
+      input.readThreads(threadIds).pipe(
+        Effect.map((decode) =>
+          request.includeArchived === true
+            ? decode.pipe(
+                Effect.map((snapshot) => ({
+                  ...snapshot,
+                  threads: [...snapshot.threads, ...snapshot.archivedThreads],
+                })),
+              )
+            : decode,
+        ),
+      ),
     latestSequence: input.latestSequence,
   });
   return { ...messages, snapshotSequence: older.snapshotSequence, threads: older.threads };

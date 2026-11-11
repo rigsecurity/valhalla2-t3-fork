@@ -9,6 +9,7 @@ import {
   rankSearchItems,
   recordThreadOpen,
   messageMatcher,
+  fuzzyMessageMatcher,
   scoreSearchTerms,
   scoreThreadSearch,
   SEARCH_RECENCY_HALF_LIFE_MS,
@@ -19,6 +20,19 @@ import {
 const NOW = Date.UTC(2026, 9, 23);
 const scoreMessageMatch = (text: string, query: string) => messageMatcher(query)(text);
 const DAY = 24 * 60 * 60 * 1000;
+
+it("limits message typo recovery to one word and preserves numeric identifiers", () => {
+  expect(fuzzyMessageMatcher("perforamnce checklist")("Performance checklist")).toMatchObject({
+    quality: 0.2,
+    offset: 0,
+    matchedQuery: "Performance checklist",
+  });
+  expect(fuzzyMessageMatcher("perforamnce checklst")("Performance checklist")).toBeNull();
+  expect(fuzzyMessageMatcher("314158")("Pull request 314159")).toBeNull();
+  expect(
+    fuzzyMessageMatcher("https://example.com/pull/314158")("https://example.com/pull/314159"),
+  ).toBeNull();
+});
 
 function thread(title: string, overrides: Partial<ThreadSearchSubject> = {}): ThreadSearchSubject {
   return { title, activityAt: NOW - 30 * DAY, ...overrides };

@@ -38,6 +38,7 @@ public final class T3KeyboardCommandsView: ExpoView {
     var commands = [
       enabledCommand("newTask", input: "n", modifiers: .command, action: #selector(newTask), title: "New Task"),
       enabledCommand("focusSearch", input: "f", modifiers: .command, action: #selector(focusSearch), title: "Find"),
+      enabledCommand("commandPalette", input: "f", modifiers: [.command, .alternate], action: #selector(openCommandPalette), title: "Search Everything"),
       isPad
         ? enabledCommand("commandPalette", input: "k", modifiers: .command, action: #selector(openCommandPalette), title: "Command Palette")
         : enabledCommand("focusSearch", input: "k", modifiers: .command, action: #selector(focusSearch), title: "Focus Search"),

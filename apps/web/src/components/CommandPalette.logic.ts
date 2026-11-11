@@ -429,12 +429,14 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
   renderTrailingContent?: (thread: TThread) => ReactNode;
   renderDescription?: (thread: TThread, meta: { projectTitle: string | undefined }) => ReactNode;
   runThread: (thread: TThread) => Promise<void>;
+  includeArchived?: boolean;
   /** Makes the environment searchable; pass it only with two or more environments. */
   environmentLabelOf?: (thread: TThread) => string | null;
 }): CommandPaletteActionItem[] {
   // Callers order these: recents by last use, search results by rank.
   const visibleThreads = input.threads.filter(
-    (thread) => thread.archivedAt === null && !isSidebarHiddenThread(thread),
+    (thread) =>
+      (input.includeArchived || thread.archivedAt === null) && !isSidebarHiddenThread(thread),
   );
 
   return visibleThreads.map((thread) => {
@@ -781,7 +783,7 @@ export function buildRootGroups(input: {
 export function getCommandPaletteInputPlaceholder(mode: CommandPaletteMode): string {
   switch (mode) {
     case "root":
-      return "Search commands, projects, and threads...";
+      return "Search everything: chats, PRs, branches, projects…";
     case "root-browse":
       return "Enter project path (e.g. ~/projects/my-app)";
     case "submenu":
@@ -864,6 +866,7 @@ export function errorMessage(error: unknown): string {
 
 const OVERLAY_MODE_BY_COMMAND = {
   "commandPalette.toggle": "command",
+  "globalSearch.toggle": "command",
   "filePicker.toggle": "files",
   "projectSearch.toggle": "content",
 } as const satisfies Partial<Record<string, SearchOverlayMode>>;

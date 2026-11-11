@@ -62,12 +62,13 @@ export interface ThreadSearchResultsState {
 /**
  * How a search reaches environments whose shells omit older settled threads (others ignore it):
  * the caller's project scope and its names for environments, which its own ranking matches, and
- * whether to skip message search.
+ * whether to skip messages or include archived threads on capable servers.
  */
 export const ThreadSearchScope = Schema.Struct({
   projectIds: Schema.optionalKey(Schema.Array(ProjectId)),
   environmentLabels: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   titlesOnly: Schema.optionalKey(Schema.Boolean),
+  includeArchived: Schema.optionalKey(Schema.Boolean),
 });
 export type ThreadSearchScope = typeof ThreadSearchScope.Type;
 
@@ -115,6 +116,7 @@ export function createThreadSearchResultsAtomFamily<E>(options: {
     input: OrchestrationV2SearchThreadsInput,
   ) => Atom.Atom<AsyncResult.AsyncResult<OrchestrationV2SearchThreadsResult, E>>;
   readonly olderSettledBefore?: (environmentId: EnvironmentId) => Atom.Atom<string | null>;
+  readonly globalSearchSupported?: (environmentId: EnvironmentId) => Atom.Atom<boolean>;
   readonly labelPrefix: string;
 }) {
   const results = Atom.family((key: string) =>
@@ -136,11 +138,24 @@ export function createThreadSearchResultsAtomFamily<E>(options: {
         const before = options.olderSettledBefore
           ? get(options.olderSettledBefore(environmentId))
           : null;
-        if (!searchMessages && before === null) continue;
+        const globalSearch =
+          scope.includeArchived === true &&
+          options.globalSearchSupported !== undefined &&
+          get(options.globalSearchSupported(environmentId));
+        if (!searchMessages && before === null && !globalSearch) continue;
         const label = scope.environmentLabels?.[environmentId];
         const result = get(
           options.getSearchAtom(environmentId, {
             query,
+            ...(globalSearch
+              ? {
+                  includeArchived: true,
+                  fuzzy: true,
+                  ...(scope.projectIds === undefined ? {} : { projectIds: scope.projectIds }),
+                  ...(label === undefined ? {} : { environmentLabel: label }),
+                  ...(searchMessages ? {} : { titlesOnly: true }),
+                }
+              : {}),
             ...(before === null
               ? {}
               : {

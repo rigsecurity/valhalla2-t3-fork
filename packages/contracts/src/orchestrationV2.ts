@@ -3711,13 +3711,13 @@ export type OrchestrationV2GetWorktreeThreadIdsInput =
   typeof OrchestrationV2GetWorktreeThreadIdsInput.Type;
 
 /**
- * The client's thread search. With `olderSettledBefore`, the result also carries the rows of the
- * best matching threads settled before it, which shells that omit older settled threads leave out:
- * title, branch, pull request and project matches (in `projectIds` when given), then message hits.
- * Send the extra keys only to servers that advertise `shellOlderSettled`.
+ * Older-settled keys require `shellOlderSettled`; `includeArchived` and `fuzzy` require
+ * `globalThreadSearch`. Search returns messages and bounded matching shell rows.
  */
 export const OrchestrationV2SearchThreadsInput = Schema.Struct({
   ...OrchestrationSearchThreadsInput.fields,
+  includeArchived: Schema.optionalKey(Schema.Boolean),
+  fuzzy: Schema.optionalKey(Schema.Boolean),
   olderSettledBefore: Schema.optionalKey(IsoDateTime),
   projectIds: Schema.optionalKey(Schema.Array(ProjectId)),
   /** The client's name for this environment, which its own ranking also matches. */

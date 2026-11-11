@@ -24,6 +24,7 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProjectStore from "./ProjectStore.ts";
 import * as ThreadSearch from "./ThreadSearch.ts";
+import { rebuildThreadSearch } from "./threadSearchIndex.ts";
 
 const layerTest = Layer.mergeAll(
   ThreadSearch.layer,
@@ -346,6 +347,12 @@ it.layer(layerTest)("ThreadSearch", (it) => {
       );
       assert.lengthOf((yield* search.search({ query: "needle", limit: 1 })).matches, 1);
       assert.deepEqual((yield* search.search({ query: "ne%le" })).matches, []);
+      assert.sameMembers(
+        (yield* search.search({ query: "needle", includeArchived: true })).matches.map(
+          (match) => match.threadId,
+        ),
+        [assistantOnly, both, ThreadId.make("thread:archived")],
+      );
     }),
   );
 
@@ -669,7 +676,7 @@ it.layer(layerTest)("ThreadSearch filters before it ranks", (it) => {
     }),
   );
 
-  it.effect("matches messages as they read, with links as their text", () =>
+  it.effect("matches link labels and destinations and finds the label in the thread", () =>
     Effect.gen(function* () {
       const projections = yield* ProjectionStore.ProjectionStoreV2;
       const search = yield* ThreadSearch.ThreadSearch;
@@ -688,10 +695,14 @@ it.layer(layerTest)("ThreadSearch filters before it ranks", (it) => {
         { discard: true },
       );
       const { matches } = yield* search.search({ query: "heron" });
-      assert.deepEqual(
+      assert.sameDeepMembers(
         matches.map((match) => [match.threadId, match.snippet]),
-        [[labeled, "See the heron plan now"]],
+        [
+          [labeled, "See the heron plan now"],
+          [addressOnly, "Read this (https://heron.dev/b)"],
+        ],
       );
+      assert.equal(matches.find((match) => match.threadId === addressOnly)?.matchedQuery, "this");
     }),
   );
 
@@ -898,6 +909,148 @@ it.layer(layerTest)("ThreadSearch.searchOlderSettled", (it) => {
 });
 
 it.layer(layerTest)("ThreadSearch.searchThreadsWithOlderSettledRows", (it) => {
+  it.effect(
+    "finds archived PRs, branches and misspelled messages without loading the archive",
+    () =>
+      Effect.gen(function* () {
+        const projections = yield* ProjectionStore.ProjectionStoreV2;
+        const search = yield* ThreadSearch.ThreadSearch;
+        const sql = yield* SqlClient.SqlClient;
+        const project = ProjectId.make("project:global");
+        const archived = ThreadId.make("thread:global-archive");
+        const active = ThreadId.make("thread:global-active");
+        const deleted = ThreadId.make("thread:global-deleted");
+        const url = "https://github.com/acme/app/pull/42";
+        yield* createProject(project);
+        yield* Effect.forEach(
+          [
+            thread(archived, project, {
+              title: "Authentication rollout number",
+              archivedAt: at(1),
+              linkedPullRequest: {
+                projectId: project,
+                repository: "acme/app",
+                number: 42,
+                url,
+              },
+            }),
+            message(
+              archived,
+              "global-note",
+              "user",
+              "I wrote the performance checklist for uniquemeridian.",
+            ),
+            thread(active, project),
+            message(active, "global-exact", "assistant", "perforamnce was the typo"),
+            thread(deleted, project, { title: "Authentication rollout", deletedAt: at(1) }),
+            message(deleted, "global-deleted-note", "user", "I wrote the performance checklist."),
+          ],
+          projections.apply,
+          { discard: true },
+        );
+        yield* sql`UPDATE orchestration_v2_projection_threads
+        SET payload_json = json_set(payload_json, '$.branch', 'fix/authentication')
+        WHERE thread_id = ${archived}`;
+        for (const query of [url, "#42", "acme/app#42", "fix/authentication", "authentcation"]) {
+          assert.deepEqual(yield* search.searchAll({ query, messageThreadIds: [] }), [archived]);
+        }
+        yield* sql`
+        WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1001)
+        INSERT INTO orchestration_v2_projection_threads
+          (thread_id, project_id, title, default_provider, runtime_mode, interaction_mode, created_at, updated_at, payload_json)
+        SELECT 'noise-' || i, project_id, 'Authentication noise', default_provider, runtime_mode,
+          interaction_mode, created_at, updated_at,
+          json_set(payload_json, '$.id', 'noise-' || i, '$.title', 'Authentication noise', '$.branch', NULL,
+            '$.archivedAt', NULL, '$.lineage.rootThreadId', 'noise-' || i)
+        FROM n CROSS JOIN orchestration_v2_projection_threads WHERE thread_id = ${archived}
+      `;
+        for (const query of ["authentication rollout", "global rollout", "number"]) {
+          assert.deepEqual(yield* search.searchAll({ query, messageThreadIds: [] }), [archived]);
+        }
+        yield* sql`
+        WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1100)
+        INSERT INTO orchestration_v2_projection_messages
+          (message_id, thread_id, role, streaming, created_at, updated_at, payload_json)
+        SELECT 'common-gram-' || i, ${active}, 'user', 0, ${DateTime.formatIso(at(5))},
+          ${DateTime.formatIso(at(5))}, json_object('text', 'Worker validates the configuration', 'createdBy', 'user')
+        FROM n
+      `;
+        assert.deepEqual(
+          (yield* search.search({
+            query: "uniquemeridain",
+            includeArchived: true,
+            fuzzy: true,
+          })).matches.map((match) => match.threadId),
+          [archived],
+        );
+        const result = yield* ThreadSearch.searchThreadsWithOlderSettledRows({
+          request: { query: "perforamnce", includeArchived: true, fuzzy: true },
+          search: search.search,
+          searchAll: search.searchAll,
+          searchOlderSettled: search.searchOlderSettled,
+          sql,
+          readThreads: (threadIds) => projections.readShellSnapshot({ threadIds }),
+          latestSequence: Effect.succeed(8),
+        });
+        assert.deepEqual(
+          result.matches.map((match) => match.threadId),
+          [active, archived],
+        );
+        assert.equal(result.matches[1]?.matchedQuery, "performance");
+        assert.equal(result.matches[1]?.messageId, "global-note");
+        assert.sameMembers(result.threads?.map((row) => row.id) ?? [], [active, archived]);
+        assert.isNotNull(result.threads?.find((row) => row.id === archived)?.archivedAt);
+        assert.deepEqual(
+          (yield* search.search({
+            query: "worte",
+            includeArchived: true,
+            fuzzy: true,
+          })).matches.map((m) => m.threadId),
+          [archived],
+        );
+        assert.deepEqual(
+          (yield* search.search({ query: "perforamnce" })).matches.map((m) => m.threadId),
+          [active],
+        );
+        assert.deepEqual(
+          yield* search.searchAll({ query: url, projectIds: [], messageThreadIds: [archived] }),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "updates metadata search only when indexed fields change and rebuilds after rowid changes",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const projections = yield* ProjectionStore.ProjectionStoreV2;
+        const search = yield* ThreadSearch.ThreadSearch;
+        const project = ProjectId.make("project:metadata");
+        const id = ThreadId.make("thread:metadata");
+        yield* createProject(project);
+        yield* projections.apply(thread(id, project, { title: "Hummingbird" }));
+        const find = (query: string) => search.searchAll({ query, messageThreadIds: [] });
+        assert.deepEqual(yield* find("hummingbird"), [id]);
+        const changes = sql<{ n: number }>`SELECT total_changes() AS n`.pipe(
+          Effect.map((rows) => rows[0]!.n),
+        );
+        const before = yield* changes;
+        yield* sql`UPDATE orchestration_v2_projection_threads
+        SET payload_json = json_set(payload_json, '$.updatedAt', '2026-09-27T01:00:00.000Z') WHERE thread_id = ${id}`;
+        assert.equal((yield* changes) - before, 1);
+        yield* sql`UPDATE orchestration_v2_projection_threads
+        SET payload_json = json_set(payload_json, '$.title', 'Kingfisher') WHERE thread_id = ${id}`;
+        assert.deepEqual(yield* find("hummingbird"), []);
+        assert.deepEqual(yield* find("kingfisher"), [id]);
+        yield* sql`UPDATE orchestration_v2_projection_threads SET rowid = rowid + 100 WHERE thread_id = ${id}`;
+        yield* rebuildThreadSearch(sql);
+        assert.deepEqual(yield* find("kingfisher"), [id]);
+        yield* sql`DELETE FROM orchestration_v2_projection_threads WHERE thread_id = ${id}`;
+        assert.deepEqual(yield* find("kingfisher"), []);
+      }),
+  );
+
   it.effect("adds older settled rows to message hits, or alone for titles only", () =>
     Effect.gen(function* () {
       const projections = yield* ProjectionStore.ProjectionStoreV2;
@@ -921,6 +1074,7 @@ it.layer(layerTest)("ThreadSearch.searchThreadsWithOlderSettledRows", (it) => {
           request: { query: "plover", olderSettledBefore: DateTime.formatIso(at(30)), ...request },
           search: search.search,
           searchOlderSettled: search.searchOlderSettled,
+          searchAll: search.searchAll,
           sql,
           readThreads: (threadIds) =>
             projections.readShellSnapshot({ location: "active", threadIds }),
@@ -948,6 +1102,7 @@ it.layer(layerTest)("ThreadSearch.searchThreadsWithOlderSettledRows", (it) => {
           request: { query: "plover" },
           search: search.search,
           searchOlderSettled: search.searchOlderSettled,
+          searchAll: search.searchAll,
           sql,
           readThreads: (threadIds) =>
             projections.readShellSnapshot({ location: "active", threadIds }),

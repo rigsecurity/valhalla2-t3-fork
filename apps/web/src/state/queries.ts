@@ -38,6 +38,7 @@ import { isPaginatedBranchesNextPagePending } from "./paginatedBranches";
 import { projectContentSearch, projectEnvironment } from "./projects";
 import { useEnvironmentQuery } from "./query";
 import { vcsEnvironment } from "./vcs";
+import { serverEnvironment } from "./server";
 
 const PROJECT_PATH_SEARCH_DEBOUNCE_MS = 120;
 const COMPOSER_PATH_SEARCH_LIMIT = 80;
@@ -75,6 +76,11 @@ const threadSearch = createThreadSearchResultsAtomFamily({
       ? orchestrationEnvironment.threadSearch({ environmentId, input })
       : olderSettledThreads.searchAtom(environmentId, input),
   olderSettledBefore: olderSettledBeforeAtom,
+  globalSearchSupported: Atom.family((environmentId: EnvironmentId) =>
+    Atom.make(
+      (get) => get(serverEnvironment.configValueAtom(environmentId))?.globalThreadSearch === true,
+    ),
+  ),
   labelPrefix: "web:thread-search",
 });
 
@@ -116,7 +122,7 @@ export function useThreadSearch(
   const canSearch =
     environmentIds.length > 0 &&
     ((scope.titlesOnly !== true && messageSearchTokens(normalizedQuery).long.length > 0) ||
-      (anyOlderSettled && normalizedQuery.length >= 2));
+      ((anyOlderSettled || scope.includeArchived === true) && normalizedQuery.length >= 2));
   const settledQuery = canSearch && normalizedQuery === debouncedQuery ? debouncedQuery : null;
   const searchKeyOf = (searchQuery: string) =>
     makeThreadSearchKey(environmentIds, searchQuery, scope);
